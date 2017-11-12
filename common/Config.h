@@ -63,6 +63,27 @@ private:
 	float m_stdev;
 };
 
+class ConfigDataset
+{
+public:
+    ConfigDataset(std::string train_path, std::string test_path, int train_samples, int test_samples)
+    {
+        m_trainPath = train_path;
+        m_testPath = test_path;
+        m_trainSamples = train_samples;
+        m_testSamples = test_samples;
+    }
+    std::string getTrainPath(){return m_trainPath;}
+    std::string getTestPath(){return m_testPath;}
+    int getTrainSamples(){return m_trainSamples;}
+    int getTestSamples(){return m_testSamples;}
+private:
+    std::string m_trainPath;
+    std::string m_testPath;
+    int m_trainSamples;
+    int m_testSamples;
+};
+
 class ConfigTestEpoch
 {
 public:
@@ -143,7 +164,6 @@ private:
 };
 
 
-
 class ConfigChannels
 {
 public:
@@ -167,6 +187,15 @@ public:
 	bool isGaussian(){
 		return m_initType == std::string("Gaussian");
 	}
+    bool isBernoulli(){
+        return m_initType == std::string("Bernoulli");
+    }
+    bool isFixed(){
+        return m_initType == std::string("Fixed");
+    }
+    bool isExternal(){
+        return m_initType == std::string("External");   
+    }
 	bool hasSubInput(){
 		return m_subInput != std::string("NULL");
 	}
@@ -239,6 +268,20 @@ public:
 		m_input = std::string("NULL");
 	}
 };
+
+class ConfigDataSpiking : public ConfigBase{
+public:
+    ConfigDataSpiking(std::string name,
+        std::string type,
+        int input_neurons){
+        m_name = name;
+		m_type = type;
+		m_input = std::string("NULL");
+        m_inputNeurons = input_neurons;	
+    }
+    int m_inputNeurons;
+};
+
 
 class ConfigConv : public ConfigBase
 {
@@ -454,6 +497,77 @@ public:
 	}
 };
 
+class ConfigSpiking : public ConfigBase
+{
+public:
+	ConfigSpiking(std::string name, std::string type, std::string input, int num_classes,
+        int num_neurons, float weight_decay, float vth, float t_refrac, float tau_m, float tau_s,
+        float initW, int weight_connect, std::string initType, std::string weight_path,
+        std::string lweight_path, std::string laterial_type, std::string r_dim, 
+        float local_inb_strength, float undesired_level, float desired_level, float margin, 
+        std::map<std::string, std::string> ref_paths)
+    {
+        m_name = name;
+        m_type = type;
+        m_input = input;
+        m_numNeurons = num_neurons;
+        m_classes = num_classes;
+        m_weightDecay = weight_decay;
+        m_vth = vth;
+        m_t_ref = t_refrac;
+        m_tau_m = tau_m;
+        m_tau_s = tau_s;
+        m_initW = initW;
+        m_weightConnect = weight_connect;
+        m_initType = initType;
+        m_weightPath = weight_path;
+        m_lweightPath = lweight_path;
+        m_laterialType = laterial_type;
+        m_reservoirDim = this->parseDim(r_dim);
+        m_localInbStrength = local_inb_strength;
+        m_undesired_level = undesired_level;
+        m_desired_level = desired_level;
+        m_margin = margin;
+        m_ref_weight_path = ref_paths[std::string("refWeightPath")];
+        m_ref_lweight_path = ref_paths[std::string("refLWeightPath")];
+        m_ref_output_train_path = ref_paths[std::string("refOutputTrainPath")];
+        m_ref_output_test_path = ref_paths[std::string("refOutputTestPath")];
+	}
+    bool hasLaterialWeight(){return m_laterialType != std::string("NULL");}
+    std::vector<int> parseDim(std::string s){
+        std::vector<int> dim;
+        size_t pos = 0;
+        std::string token;
+        while((pos = s.find("x")) != std::string::npos) {
+            token = s.substr(0, pos);
+            dim.push_back(atoi(token.c_str()));
+            s.erase(0, pos + 1);
+        }
+        dim.push_back(atoi(s.c_str()));
+        return dim;
+    }
+    int m_numNeurons;
+    int m_classes;
+	float m_weightDecay;
+    float m_vth;
+    int m_t_ref;
+    float m_tau_m;
+    float m_tau_s;
+    int m_weightConnect;
+    std::string m_weightPath;
+    std::string m_lweightPath;
+    std::string m_laterialType;
+    std::vector<int> m_reservoirDim;
+    float m_localInbStrength;
+    float m_undesired_level;
+    float m_desired_level;
+    float m_margin;
+    std::string m_ref_weight_path;
+    std::string m_ref_lweight_path;
+    std::string m_ref_output_train_path;
+    std::string m_ref_output_test_path;
+};
+
 class ConfigHorizontal
 {
 public:
@@ -496,7 +610,7 @@ public:
 	void clear(){
 
 		delete  m_nonLinearity;
-		delete  m_isGrandientChecking;
+		delete  m_isGradientChecking;
 		delete  m_batchSize;
 		delete  m_channels;
 
@@ -506,13 +620,14 @@ public:
 		delete m_distortion;
 		delete m_imageShow;
 		delete m_horizontal;
+        delete m_dataset;
 	}
 
 	bool getImageShow(){
 		return m_imageShow->getValue();}
 
 	bool getIsGradientChecking(){
-		return m_isGrandientChecking->getValue();}
+		return m_isGradientChecking->getValue();}
 
 	int getBatchSize(){
 		return m_batchSize->getValue();}
@@ -587,6 +702,30 @@ public:
 	int getClasses(){
 		return m_classes;
 	}
+    
+    int getEndTime(){
+        return m_endTime;
+    }
+    
+    std::string getTrainPath(){
+        return m_dataset->getTrainPath();
+    }
+
+    std::string getTestPath(){
+        return m_dataset->getTestPath();
+    }
+
+    int getTrainSamples(){
+        return m_dataset->getTrainSamples();
+    }
+
+    int getTestSamples(){
+        return m_dataset->getTestSamples();
+    }
+
+    void setEndTime(int end_time){
+        m_endTime = end_time;
+    }
 	void setTraining(bool isTrainning){training = isTrainning;}
 	bool isTraining(){return training;}
 
@@ -611,7 +750,7 @@ private:
 
 
 	ConfigNonLinearity       *m_nonLinearity;
-	ConfigGradient           *m_isGrandientChecking;
+	ConfigGradient           *m_isGradientChecking;
 	ConfigBatchSize          *m_batchSize;
 	ConfigChannels           *m_channels;
 
@@ -623,10 +762,13 @@ private:
 	ConfigHorizontal         *m_horizontal;
 	ConfigTestEpoch          *m_test_epoch;
 	ConfigWhiteNoise         *m_white_noise;
+    ConfigDataset            *m_dataset;
+
 	float momentum;
 	float lrate;
 	int m_imageSize;
 	int m_classes;
+    int m_endTime;
 	bool training;
 };
 

@@ -18,7 +18,9 @@ public:
 	void calCost();
 
 	cuMatrix<float>* getOutputs();
-	cuMatrix<float>* getCurDelta() ;
+	cuMatrix<float>* getCurDelta();
+    cuMatrix<int>* getSpikingOutputs(){return NULL;}
+    cuMatrix<int>* getFireCount(){return NULL;}
 
 	void setPreDelta(cuMatrix<float>* _preDelta);
 

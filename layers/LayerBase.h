@@ -20,6 +20,7 @@ public:
 
 	virtual cuMatrix<float>* getOutputs() = 0;
 	virtual cuMatrix<float>* getCurDelta() = 0;
+    virtual cuMatrix<int>* getFireCount() = 0;
 
 	virtual void printParameter() = 0;
 
@@ -49,8 +50,19 @@ public:
 class ConvLayerBase: public LayerBase
 {
 public:
-	int inputDim ;
+	int inputDim;
 	int outputDim;
+	int inputAmount;
+	int outputAmount;
+};
+
+class SpikingLayerBase: public LayerBase
+{
+public:
+    virtual cuMatrix<bool>* getSpikingOutputs() = 0;
+	int inputDim;
+	int outputDim;
+    int endTime;
 	int inputAmount;
 	int outputAmount;
 };

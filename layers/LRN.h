@@ -41,6 +41,14 @@ public:
 		return curDelta;
 	}
 
+    cuMatrix<bool>* getSpikingOutputs(){
+        return NULL;
+    }
+
+    cuMatrix<int>* getFireCount(){
+        return NULL;
+    }
+
 	void setPreDelta(cuMatrix<float>* _preDelta){
 		preDelta = _preDelta;
 	}

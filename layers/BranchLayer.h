@@ -31,6 +31,9 @@ public:
 
 	cuMatrix<float>* getOutputs(){return NULL;}
 	cuMatrix<float>* getCurDelta(){return NULL;}
+    cuMatrix<bool>* getSpikingOutputs(){return NULL;}
+    cuMatrix<int>* getFireCount(){return NULL;}
+
 
 	cuMatrix<float>* getSubOutput(std::string name){
 		if(mapId.find(name) != mapId.end()){

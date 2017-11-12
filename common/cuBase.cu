@@ -58,20 +58,6 @@ __global__ void g_nonLinearity(float* inputs, int len, int NONLIN)
 	}
 }
 
-__device__ double atomicAdd(double* address, double val)
-{ 	
-	unsigned long long int* address_as_ull =
-		(unsigned long long int*)address;
-	unsigned long long int old = *address_as_ull, assumed;
-	do {
-		assumed = old;
-		old = atomicCAS(address_as_ull, assumed,
-			__double_as_longlong(val +
-			__longlong_as_double(assumed)));
-	} while (assumed != old);
-	return __longlong_as_double(old);
-}
-
 __device__ void swap(float& val1, float& val2){
 	float tmp = val1;
 	val1 = val2;
@@ -354,3 +340,4 @@ __global__ void g_convert(float* cuPool, float*cuPoolToFlActi, int batch, int si
 		}
 	}
 }
+

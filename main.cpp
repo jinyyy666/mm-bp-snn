@@ -6,6 +6,7 @@
 #include <time.h>
 #include <vector>
 #include "net.cuh"
+#include "net_spiking.cuh"
 #include "common/cuMatrix.h"
 #include "common/util.h"
 #include "dataAugmentation/cuTrasformation.cuh"
@@ -19,14 +20,19 @@
 #include "readData/readCIFAR10Data.h"
 #include "readData/readChineseData.h"
 #include "readData/readCIFAR100Data.h"
+#include "readData/readNMnistData.h"
+#include "readData/readSpeechData.h"
 #include "common/track.h"
 #include "layers/Pooling.h"
 
+//#define VERIFY
 
 void runMnist();
 void runCifar10();
 void runCifar100();
 void runChinese();
+void runNMnist();
+void runSpeech();
 void cuVoteMnist();
 bool init(cublasHandle_t& handle);
 
@@ -44,7 +50,7 @@ int main (int argc, char** argv)
 		g_argv.push_back(atoi(argv[1]));
 		g_argv.push_back(atoi(argv[2]));
 	}
-	printf("1. MNIST\n2. CIFAR-10\n3. CHINESE\n4. CIFAR-100\n5. VOTE MNIST\nChoose the dataSet to run:");
+	printf("1. MNIST\n2. CIFAR-10\n3. CHINESE\n4. CIFAR-100\n5. VOTE MNIST\n6. NMnist\n7. Spoken English Letter\nChoose the dataSet to run:");
 	int cmd;
 	if(g_argv.size() >= 2)
 		cmd = g_argv[0];
@@ -62,6 +68,10 @@ int main (int argc, char** argv)
 		runCifar100();
 	else if(cmd == 5)
 		cuVoteMnist();
+    else if(cmd == 6)
+        runNMnist();
+    else if(cmd == 7)
+        runSpeech();
 	return EXIT_SUCCESS;
 }
 
@@ -356,7 +366,145 @@ void runMnist(){
 	LOG(logStr, "Result/log.txt");
 }
 
+void runNMnist(){
+	const int nclasses = 10;
 
+ 	//*state and cublas handle
+ 	cublasHandle_t handle;
+	init(handle);
+	
+ 	//* read the data from disk
+	cuMatrixVector<bool> trainX;
+	cuMatrixVector<bool> testX;
+ 	cuMatrix<int>* trainY, *testY;
+    
+    //* initialize the configuration
+	Config * config = Config::instance();
+#ifdef VERIFY
+    config->initPath("Config/NMnistConfig_test.txt");
+#else
+    config->initPath("Config/NMnistConfig.txt");
+#endif
+
+    ConfigDataSpiking * ds_config = (ConfigDataSpiking*)config->getLayerByName("data");
+    int input_neurons = ds_config->m_inputNeurons;
+    int end_time = config->getEndTime();
+    int train_samples = config->getTrainSamples();
+    int test_samples = config->getTestSamples();
+ 	readNMnistData(trainX, trainY, config->getTrainPath(), train_samples, input_neurons, end_time);
+ 	readNMnistData(testX , testY, config->getTestPath(), test_samples, input_neurons, end_time);
+
+	MemoryMonitor::instance()->printCpuMemory();
+	MemoryMonitor::instance()->printGpuMemory();
+
+ 	//* build SNN net 
+ 	int nsamples = trainX.size();
+
+ 	int batch = Config::instance()->getBatchSize();
+	float start,end;
+    /*
+	int cmd;
+	printf("1. random init weight\n2. Read weight from the checkpoint\nChoose the way to init weight:");
+
+	if(g_argv.size() >= 2)
+		cmd = g_argv[1];
+	else 
+		if(1 != scanf("%d", &cmd)){
+            LOG("scanf fail", "result/log.txt");
+        }
+    */
+	buildSpikingNetwork(trainX.size(), testX.size());
+
+    /*
+	if(cmd == 2)
+		cuReadSpikingNet("Result/checkPoint.txt");
+    */
+
+	//* learning rate
+	std::vector<float> nlrate;
+	std::vector<float> nMomentum;
+	std::vector<int> epoCount;
+	nlrate.push_back(0.00001f);   nMomentum.push_back(0.90f);  epoCount.push_back(10);
+
+	start = clock();
+	cuTrainSpikingNetwork(trainX, trainY, testX, testY, batch, nclasses, nlrate, nMomentum, epoCount, handle);
+	end = clock();
+
+	char logStr[1024];
+	sprintf(logStr, "trainning time hours = %f\n", 
+		(end - start) / CLOCKS_PER_SEC / 3600);
+	LOG(logStr, "Result/log.txt");
+}
+
+
+void runSpeech(){
+	const int nclasses = 26;
+
+ 	//*state and cublas handle
+ 	cublasHandle_t handle;
+	init(handle);
+	
+ 	//* read the data from disk
+	cuMatrixVector<bool> trainX;
+	cuMatrixVector<bool> testX;
+ 	cuMatrix<int>* trainY, *testY;
+    
+    //* initialize the configuration
+	Config * config = Config::instance();
+#ifdef VERIFY
+    config->initPath("Config/SpokenLetterConfig_test.txt");
+#else
+    config->initPath("Config/SpokenLetterConfig.txt");
+#endif
+    ConfigDataSpiking * ds_config = (ConfigDataSpiking*)config->getLayerByName("data");
+    int input_neurons = ds_config->m_inputNeurons;
+    int end_time = config->getEndTime();
+    int train_samples = config->getTrainSamples();
+    int test_samples = config->getTestSamples();
+ 	readSpeechData(trainX, trainY, config->getTrainPath(), train_samples, input_neurons, end_time, nclasses, false);
+ 	readSpeechData(testX , testY,  config->getTestPath(), test_samples, input_neurons, end_time, nclasses, false);
+
+	MemoryMonitor::instance()->printCpuMemory();
+	MemoryMonitor::instance()->printGpuMemory();
+
+ 	//* build SNN net 
+ 	int nsamples = trainX.size();
+
+ 	int batch = Config::instance()->getBatchSize();
+	float start,end;
+    /*
+	int cmd;
+	printf("1. random init weight\n2. Read weight from the checkpoint\nChoose the way to init weight:");
+
+	if(g_argv.size() >= 2)
+		cmd = g_argv[1];
+	else 
+		if(1 != scanf("%d", &cmd)){
+            LOG("scanf fail", "result/log.txt");
+        }
+    */
+	buildSpikingNetwork(trainX.size(), testX.size());
+
+    /*
+	if(cmd == 2)
+		cuReadSpikingNet("Result/checkPoint.txt");
+    */
+
+	//* learning rate
+	std::vector<float> nlrate;
+	std::vector<float> nMomentum;
+	std::vector<int> epoCount;
+	nlrate.push_back(0.00001f);   nMomentum.push_back(0.00f);  epoCount.push_back(10);
+
+	start = clock();
+	cuTrainSpikingNetwork(trainX, trainY, testX, testY, batch, nclasses, nlrate, nMomentum, epoCount, handle);
+	end = clock();
+
+	char logStr[1024];
+	sprintf(logStr, "trainning time hours = %f\n", 
+		(end - start) / CLOCKS_PER_SEC / 3600);
+	LOG(logStr, "Result/log.txt");
+}
 
 void cuVoteMnist()
 {

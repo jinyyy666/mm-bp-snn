@@ -29,15 +29,14 @@ include_directories(${PROJECT_SOURCE_DIR})
 
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -rdynamic")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -rdynamic")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -rdynamic")
+
 
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}
-  -gencode arch=compute_20,code=sm_20
-  -gencode arch=compute_20,code=sm_21
-  -gencode arch=compute_30,code=sm_30
-  -gencode arch=compute_35,code=sm_35
-  -gencode arch=compute_50,code=sm_50
-  -gencode arch=compute_50,code=compute_50
+  -gencode arch=compute_60,code=sm_60
+#  -G
+#  -g
   -rdc=true
   )
 
@@ -56,7 +55,9 @@ file(GLOB CUDA_CNN_CU_SOURCES  RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
     "dataAugmentation/*" 
     "common/*" 
     "main.cpp"
-    "net.*")
+    "net.*"
+    "net_spiking.*")
+
     #  EXCLUDE_FROM_ALL "build/*")
 
 cuda_add_executable(CUDA-CNN ${CUDA_CNN_CU_SOURCES})

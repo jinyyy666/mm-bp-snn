@@ -31,6 +31,8 @@ public:
 		return m_vec[index];
 	}
 	size_t size(){return m_vec.size();}
+    
+    bool empty(){return m_vec.empty();}
 
 	void push_back(cuMatrix<T>* m){m_vec.push_back(m);}
 
@@ -60,6 +62,7 @@ public:
 			exit(0);
 		}
 	}
+
 
 	void shuffle(int times, cuMatrix<int>*&labels){
 		cudaError_t cudaStat;

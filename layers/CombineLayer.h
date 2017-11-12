@@ -32,6 +32,9 @@ public:
 
 	cuMatrix<float>* getOutputs() {return outputs;}
 	cuMatrix<float>* getCurDelta(){return curDelta;}
+    cuMatrix<bool>* getSpikingOutputs(){return NULL;}
+    cuMatrix<int>* getFireCount(){return NULL;}
+
 
 	int getOutputAmount(){
 		return outputAmount;

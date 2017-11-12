@@ -38,5 +38,7 @@ void dropDelta(cuMatrix<float>* M, float cuDropProb);
 void dropScale(cuMatrix<float>* M, float cuDropProb);
 void initMatrix(cuMatrix<float>* M, float iniw);
 void checkMatrixIsSame(cuMatrix<float>*x, cuMatrix<float>*y);
+void checkMatrixIsSame(cuMatrix<bool>*x, cuMatrix<bool>*y, int n_outputs);
+int extractNeuronIndex(const std::string& name);
 
 #endif

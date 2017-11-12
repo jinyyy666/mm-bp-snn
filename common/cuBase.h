@@ -5,7 +5,6 @@
 #include <helper_cuda.h>
 #include "util.h"
 
-__device__ double atomicAdd(double* address, double val);
 __device__ float d_nonLinearity(float val, int NONLIN);
 __device__ float d_dnonLinearity(float val,int NONLIN);
 __device__ void   swap(float& val1, float& val2);

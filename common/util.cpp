@@ -2,6 +2,9 @@
 #include <opencv2/opencv.hpp>
 #include "Config.h"
 #include <time.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <iostream>
 
 #include "opencv2/opencv.hpp"
 #include "opencv2/core/core_c.h"
@@ -258,18 +261,58 @@ void initMatrix(cuMatrix<float>* M, float initW)
 
 void checkMatrixIsSame(cuMatrix<float>*x, cuMatrix<float>*y)
 {
-    Assert(x->rows == y->rows);
-    Assert(x->cols == y->cols);
-    Assert(x->channels == y->channels);
+    assert(x->rows == y->rows);
+    assert(x->cols == y->cols);
+    assert(x->channels == y->channels);
     for(int i = 0; i < x->rows; i++){
         for(int j = 0; j < x->cols; j++){
             for(int k = 0; k < x->channels; k++){
-                float t = x->get(i, j, k) - y->get(i, j, k);
-                if(fabs(t) > 0.001){
-                    printf("\n%d %d %d %f %f %f\n", i, j, k, x->get(i,j, k), y->get(i,j,k), t);
-                }
-                Assert(fabs(t) < 0.001);
+                float diff = x->get(i, j, k) - y->get(i, j, k);
+                if(fabs(diff) > 0.001){
+                    printf("\n%d %d %d %f %f %f\n", i, j, k, x->get(i,j, k), y->get(i,j,k), diff);
+               }
+                assert(fabs(diff) < 0.001);
             }
         }
     }
+}
+
+//* this is only used to check the spike outputs
+//* the matrix: 1 x (endTime * outputDim)
+void checkMatrixIsSame(cuMatrix<bool>*x, cuMatrix<bool>*y, int n_outputs)
+{
+    assert(x->rows == y->rows);
+    assert(x->cols == y->cols);
+    assert(x->channels == y->channels);
+    assert(x->channels == 1);
+    int nrows = x->rows, ncols = x->cols;
+    for(int i = 0; i < nrows; i++){
+        for(int j = 0; j < ncols; j++){
+            for(int k = 0; k < x->channels; k++){
+                int t = j / n_outputs;
+                int idx = j % n_outputs;
+                float diff = int(x->get(i, j, k)) - int(y->get(i, j, k));
+                if(fabs(diff) > 0.001){
+                    printf("\n%d %d %d %d %d %f\n", i, j, k, x->get(i,j, k), y->get(i,j,k), diff);
+                    std::cout<<"For neuron: "<<idx<<" at time: "<<t<<"\n"
+                            <<(x->get(i,j,k) ? "Expect to fire" : "Expect not fire")<<"\n"
+                            <<(y->get(i,j,k) ? "But fire" : "But not fire")<<std::endl;
+ 
+                }
+                assert(fabs(diff) < 0.001);
+            }
+        }
+    }
+}
+
+int extractNeuronIndex(const string& name)
+{
+    size_t pos = name.find_last_of("_");
+    if(pos == string::npos)
+    {
+        cout<<"Invalid neuron name: "<<name<<endl;
+        exit(EXIT_FAILURE);
+    }
+    string index = name.substr(pos + 1);
+    return atoi(index.c_str());
 }

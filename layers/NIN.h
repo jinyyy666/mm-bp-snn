@@ -35,6 +35,14 @@ public:
 		return curDelta;
 	}
 
+    cuMatrix<int>* getSpikingOutputs(){
+        return NULL;
+    }
+
+    cuMatrix<int>* getFireCount(){
+        return NULL;
+    }
+
 	int getOutputAmount(){
 		return outputAmount;
 	}
