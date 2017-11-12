@@ -7,6 +7,6 @@ CUDA-CNN
 cmake_install.cmake
 speech/
 nmnist/
-nmnist_400/
+nmnist_*/
 A*
 Makefile

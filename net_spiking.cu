@@ -1,6 +1,7 @@
 #include "net_spiking.cuh"
 #include "opencv2/opencv.hpp"
 #include <cuda_runtime.h>
+#include <cuda_profiler_api.h>
 #include "common/util.h"
 #include <time.h>
 #include "common/Config.h"
@@ -324,6 +325,7 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
     float lrate = 0.05f;
     float Momentum = 0.9f;
     int id = 0;
+    cudaProfilerStart();
     for (int epo = 0; epo < epochs; epo++) {
         if (id >= (int)nlrate.size())
             break;
@@ -395,5 +397,6 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
             MemoryMonitor::instance()->printGpuMemory();
         }
     }
+    cudaProfilerStop();
 }
 
