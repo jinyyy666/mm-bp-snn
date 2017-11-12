@@ -9,10 +9,10 @@
 #include <vector>
 
 //* read each speech file
-void read_each_speech(const std::string& filename, cuMatrixVector<bool>& x, int nrows, int ncols);
+void read_each_speech(const std::string& filename, cuMatrixVector<int>& x, int nrows, int ncols);
 
 //* read each speech from the dump file
-void read_each_speech_dump(const std::string& filename, cuMatrixVector<bool>& x, int nrows, int ncols);
+void read_each_speech_dump(const std::string& filename, cuMatrixVector<int>& x, int nrows, int ncols);
 
 //* read training data and lables
 int readSpeechData(cuMatrixVector<bool> &x,
@@ -20,7 +20,7 @@ int readSpeechData(cuMatrixVector<bool> &x,
 	std::string path,
 	int number_of_speeches,
 	int input_neurons,
-    int end_time,
+    int max_spikes,
     int CLS,
     bool is_dump);
 
@@ -28,6 +28,6 @@ int readSpeechData(cuMatrixVector<bool> &x,
 int readSpeechLabel(const std::vector<int>& labels, cuMatrix<int>* &mat);
 
 //* read the samples and label (encoded in the directory)
-int readSpeech(std::string path, cuMatrixVector<bool>& x, std::vector<int>& labels, int num, int input_neurons, int end_time, int CLS, bool is_dump);
+int readSpeech(std::string path, cuMatrixVector<int>& x, std::vector<int>& labels, int num, int input_neurons, int max_spikes, int CLS, bool is_dump);
 
 #endif
