@@ -307,8 +307,12 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
         gradientChecking(x.m_devPoint, y->getDev(), batch, nclasses, handle);
 
 
+    float my_start = (float)clock();
     predictTestRate(x, y, testX, testY, batch, nclasses, handle);
-    
+    float my_end = (float)clock();         
+    sprintf(logStr, "time spent on test : time=%.03lfs\n", (float) (my_end - my_start) / CLOCKS_PER_SEC);
+    LOG(logStr, "Result/log.txt");
+
     if(Config::instance()->getIsGradientChecking())
         verifyResult(std::string("train"));
 

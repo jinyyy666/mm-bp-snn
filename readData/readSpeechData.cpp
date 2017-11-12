@@ -91,7 +91,9 @@ void file_finder(const std::string& path, cuMatrixVector<bool>& x, std::vector<i
 
             labels.push_back(cur_label);
             sample_count++;
+            printf("read %2d%%", 100 * sample_count / num_of_samples);
         }
+        printf("\b\b\b\b\b\b\b\b");
     }
 
 }
