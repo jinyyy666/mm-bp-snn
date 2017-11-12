@@ -1,2 +1,12 @@
 *.swp
 Result/*
+mnist/
+CMakeFiles
+CMakeCache.txt
+CUDA-CNN
+cmake_install.cmake
+speech/
+nmnist/
+nmnist_400/
+A*
+Makefile
