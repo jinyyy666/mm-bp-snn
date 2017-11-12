@@ -424,7 +424,11 @@ void runNMnist(){
 	std::vector<float> nlrate;
 	std::vector<float> nMomentum;
 	std::vector<int> epoCount;
+#ifdef VERIFY
+	nlrate.push_back(0.00001f);   nMomentum.push_back(0.00f);  epoCount.push_back(1);
+#else
 	nlrate.push_back(0.00001f);   nMomentum.push_back(0.90f);  epoCount.push_back(10);
+#endif
 
 	start = clock();
 	cuTrainSpikingNetwork(trainX, trainY, testX, testY, batch, nclasses, nlrate, nMomentum, epoCount, handle);
@@ -494,7 +498,11 @@ void runSpeech(){
 	std::vector<float> nlrate;
 	std::vector<float> nMomentum;
 	std::vector<int> epoCount;
+#ifdef VERIFY
+	nlrate.push_back(0.00001f);   nMomentum.push_back(0.00f);  epoCount.push_back(1);
+#else
 	nlrate.push_back(0.00001f);   nMomentum.push_back(0.00f);  epoCount.push_back(10);
+#endif
 
 	start = clock();
 	cuTrainSpikingNetwork(trainX, trainY, testX, testY, batch, nclasses, nlrate, nMomentum, epoCount, handle);
