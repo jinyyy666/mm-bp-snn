@@ -93,8 +93,8 @@ __global__ void g_modifySpikes_output(
 
 
 /*
- * dim3 block = dim3(batch, inputDim, outputAmount);
- * dim3 thread= min(1024, outputDim);
+ * dim3 block = dim3(batch, inputDim, outputDim);
+ * dim3 thread= dim3(256);
  */
 __global__ void g_Spiking_wgrad(
         bool* inputs,
@@ -294,10 +294,10 @@ __global__ void g_Spiking_wgradAdd(
 
 void Spiking::getGrad()
 {
-    dim3 thread = dim3(min(1024, outputDim));
-    dim3 block  = dim3(batch, inputDim);
+    dim3 thread = dim3(4);
+    dim3 block  = dim3(batch, inputDim, outputDim);
     cudaFuncSetCacheConfig(g_Spiking_wgrad,cudaFuncCachePreferL1);
-    g_Spiking_wgrad<<<block, thread>>>(
+    g_Spiking_wgrad<<<block, thread, sizeof(float)>>>(
         inputs->getDev(),
         outputs->getDev(),
         curDelta->getDev(),
@@ -1081,8 +1081,8 @@ __global__ void g_Spiking_feedforward(
 
 
 /*
- * dim3 block = dim3(batch, inputDim, outputAmount);
- * dim3 thread= min(1024, outputDim);
+ * dim3 block = dim3(batch, inputDim, outputDim);
+ * dim3 thread= min(256);
  */
 __global__ void g_Spiking_wgrad(
         bool* inputs,
@@ -1096,29 +1096,66 @@ __global__ void g_Spiking_wgrad(
         float TAU_M,
         float TAU_S)
 {
+    extern __shared__ float acc_response[];
     int batchId = blockIdx.x;
     int i_idx   = blockIdx.y;
-    int ok      = blockIdx.z;
+    int o_idx   = blockIdx.z;
 
     int wSize        = outputDim * inputDim;
     int inputSize2   = endTime * inputDim;
     int outputSize2  = endTime * outputDim;
     int curDeltaSize = outputDim;
 
-    float* wgrad  = wgradTmp[ok] + batchId * wSize;
+    float* wgrad  = wgradTmp[0] + batchId * wSize;
     bool* input    = inputs + batchId * inputSize2;
     bool* output   = outputs + batchId * outputSize2;
     float* cDelta = curDelta + batchId * curDeltaSize;
-    
-    for(int i = 0; i < outputDim; i += blockDim.x)
+
+    acc_response[0] = 0;
+    __syncthreads();
+
+    int t_post_last = -1;
+    int thread_handle_pts = (endTime + blockDim.x - 1)/ blockDim.x;
+    int tid = threadIdx.x;
+    for(int t_post = thread_handle_pts * tid; t_post < thread_handle_pts * (tid + 1); t_post++)
     {
-        int o_idx = i + threadIdx.x;
-        if(o_idx < outputDim)
-        {
-            float delta_w = d_Spiking_gradient(output, input, cDelta[o_idx], o_idx, i_idx, outputDim, inputDim, endTime, T_REFRAC, TAU_M, TAU_S);
-            wgrad[i_idx + o_idx * inputDim] = delta_w;
+        //int t_post = threadIdx.x + tt_post;
+        if(t_post == 0 || t_post > endTime) continue;
+
+        if(output[o_idx + t_post * outputDim] == true){
+            // 1. find the last post_spike
+            if(t_post_last == -1){
+                for(int time = t_post - 1; time > 1; --time){
+                    if(output[o_idx + time * outputDim] == true){
+                        t_post_last = time + T_REFRAC;
+                        break;
+                    }
+                }
+                if(t_post_last == -1)   t_post_last = 1;
+            }
+            
+            
+            // 2. Compute the accumulative effect                
+            float sum = 0.0f;
+
+            int ub = t_post;
+            int lb = max(1, int(t_post - 4*TAU_M));
+            for(int t_pre = lb; t_pre < ub; ++t_pre){
+                if(input[i_idx + t_pre * inputDim] != true)    continue;
+                int pre_time = t_pre + T_REFRAC;
+                if(pre_time > t_post)   continue;
+                int s = t_post - t_post_last;
+                int t = t_post - pre_time;
+                float factor = exp(-1*max(t - s, 0)/TAU_S)/(1 - TAU_S/TAU_M);
+                sum += factor * (exp(-1*min(s, t)/TAU_M) - exp(-1*min(s, t)/TAU_S));
+            }
+            atomicAdd(&acc_response[0], sum); 
+            t_post_last = t_post + T_REFRAC;
         }
     }
+    __syncthreads();
+    float delta_w = cDelta[o_idx] * acc_response[0];
+    wgrad[i_idx + o_idx * inputDim] = delta_w;
 
 }
 
