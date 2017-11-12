@@ -1,0 +1,84 @@
+#Comment#
+#NON_LINEARITY = NL_SIGMOID , NL_TANH , NL_RELU#
+IS_GRADIENT_CHECKING = true;    #is true for runing the test#
+SHOWIMAGE = false;              #show the images after transformation#
+TEST_EPOCH = 1;                 #the period to get the test dataset's error rate#
+WHITE_NOISE = 0.0;  
+
+
+BATCH_SIZE = 1;                
+CHANNELS = 1;                   #1, 3, 4#
+END_TIME = 658;                 #The spike train duration#
+
+
+TRAIN_SAMPLES = 1;              # number of train/test samples#
+TEST_SAMPLES = 1;
+TRAIN_DATA_PATH = test/ti_alpha/;  # train and test path for the speech samples #
+TEST_DATA_PATH = test/ti_alpha/;    
+
+[
+LAYER = DATASPIKING;
+NAME  = data;
+NUM_NEURONS = 78;
+]
+
+[
+LAYER = SPIKING;
+NAME  = reservoir;
+NUM_NEURONS = 135;
+INPUT = data;
+WEIGHT_DECAY = 0.0;
+VTH = 20;
+T_REFRAC = 2;
+TAU_M = 64;
+TAU_S = 8;
+initW = 8;
+weightConnect = 32;     # number of neurons connects to each input neuron #
+initType = External;
+weightPath = test/golden/speech/ti_alpha/weights/r_weights_info.txt;
+lweightPath = test/golden/speech/ti_alpha/weights/r_weights_recurrent_info.txt;
+laterialType = RESERVOIR;  # the laterical connections type: RESERVOIR or LOCAL_INHIBITION # 
+reservoirDim = 3 x 3 x 15;
+refOutputTrainPath = test/golden/speech/ti_alpha/spikes/Reservoir_Response/0/reservoir_spikes_0_0.dat;
+refOutputTestPath = test/golden/speech/ti_alpha/spikes/Reservoir_Response/0/reservoir_spikes_0_0.dat;
+refWeightPath = test/golden/speech/ti_alpha/weights/r_weights_info.txt;
+refLWeightPath = test/golden/speech/ti_alpha/weights/r_weights_recurrent_info.txt;
+]
+
+[
+LAYER = SPIKING;
+NAME  = hidden_0;
+NUM_NEURONS = 64;
+INPUT = reservoir;
+WEIGHT_DECAY = 0.0;
+VTH = 20;
+T_REFRAC = 2;
+TAU_M = 64;
+TAU_S = 8;
+initType = External;
+weightPath = test/golden/speech/ti_alpha/weights/h_weights_info.txt;
+refOutputTrainPath = test/golden/speech/ti_alpha/spikes/Hidden_Response_Supv/train/0/hidden_0_spikes_0_0.dat;
+refOutputTestPath = test/golden/speech/ti_alpha/spikes/Hidden_Response_Supv/test/0/hidden_0_spikes_0_0.dat;
+refWeightPath = test/golden/speech/ti_alpha/weights/h_weights_info_trained.txt;
+]
+
+[
+LAYER = SPIKING;
+NUM_CLASSES = 26;
+NAME  = output;
+NUM_NEURONS = 26;
+INPUT = hidden_0;
+WEIGHT_DECAY = 0.0;
+VTH = 5;
+T_REFRAC = 2;
+TAU_M = 64;
+TAU_S = 8;
+initType = External;
+weightPath = test/golden/speech/ti_alpha/weights/o_weights_info.txt;
+DESIRED_LEVEL = 45;
+UNDESIRED_LEVEL = 15;
+MARGIN = 5;
+refOutputTrainPath = test/golden/speech/ti_alpha/spikes/Readout_Response_Supv/train/0/readout_spikes_0_0.dat;
+refOutputTestPath = test/golden/speech/ti_alpha/spikes/Readout_Response_Supv/test/0/readout_spikes_0_0.dat;
+refWeightPath = test/golden/speech/ti_alpha/weights/o_weights_info_trained.txt;
+]
