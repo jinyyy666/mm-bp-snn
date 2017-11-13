@@ -10,3 +10,4 @@ nmnist/
 nmnist_*/
 A*
 Makefile
+*.nvvp
