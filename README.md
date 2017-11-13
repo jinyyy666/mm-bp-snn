@@ -3,7 +3,7 @@
 
 
 >Document   
->1.  The simple c version author is <a href="http://eric-yuan.me/cnn/"> Eric </a>   
+>1.  The simple base c version author is <a href="http://eric-yuan.me/cnn/"> Eric </a>  and I modified it based <a href="https://github.com/zhxfl/CUDA-CNN">zhxfl</a> for spiking neuron networks.
 >2.  <a href="http://zhxfl.github.io/cuda-cnn_cuda-stream"> Overlap Data Transfers in CUDA </a>   
 >3.  The sub-version use cudnn is <a href="https://github.com/TanDongXu/CUDA-MCDNN">tdx</a>  
 >
