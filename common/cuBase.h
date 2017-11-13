@@ -51,6 +51,12 @@ threads : <<<dim3(batch), dim3(512)>>>
 __global__ void g_preDeltaFormat(float* cuPoolFlDelta, 
 	float* cuPoolDelta, int batch, int size, int channels);
 
+/*
+function: transform the binary response matrix to the spike times
+threads : <<<dim3(batch), dim3(min(outputDim, 1024))>>>
+*/
+__global__ void g_response_2_spiketime(bool* outputs, int* outputs_time, int ouputDim, int endTime);
+
 #endif
 
 

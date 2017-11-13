@@ -47,8 +47,12 @@ public:
 
 	cuMatrix<bool>* getSpikingOutputs(){
 		return outputs;
-	};   
- 
+	}
+    
+    cuMatrix<int>*  getSpikingTimeOutputs(){
+        return outputs_time;
+    }
+
 	cuMatrix<float>* getCurDelta(){
 		return curDelta;
 	}
@@ -85,12 +89,17 @@ public:
 
 private:
 	cuMatrix<bool>*   inputs;
-	cuMatrix<float>* preDelta;
+	cuMatrix<float>*  preDelta;
 	cuMatrix<bool>*   outputs;
-	cuMatrix<float>* curDelta; // size(curDelta) == size(fireCount)
+	cuMatrix<float>*  curDelta; // size(curDelta) == size(fireCount)
+    cuMatrix<int>*    inputs_time;
+    cuMatrix<int>*    outputs_time;
+
     cuMatrix<int>*   fireCount;
     cuMatrix<int>*   maxCount;
     cuMatrix<float>* groundTruth;
+    cuMatrix<int>*   preFireCount;
+
     int * predict;
 	int batch;
 	float vth;

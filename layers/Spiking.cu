@@ -22,8 +22,7 @@ __device__ float d_Spiking_accumulate_spikes(
     int t);
 
 /*
- * Device func for spike gradient for each pair of spike train
- *
+ * Device func for spike gradient for each pair of binary spike response
  */
 __device__ float d_Spiking_gradient(
     bool* output,
@@ -37,6 +36,25 @@ __device__ float d_Spiking_gradient(
     int T_REFRAC,
     float TAU_M,
     float TAU_S);
+
+/*
+ * Device func for spike gradient for each pair of spike train in times
+ */
+__device__ float d_Spiking_gradient_spiketime(
+    int* output_time,
+    int* input_time,
+    int n_ospikes,
+    int n_ispikes,
+    float delta,
+    int o_idx,
+    int i_idx,
+    int outputDim,
+    int inputDim,
+    int endTime,
+    int T_REFRAC,
+    float TAU_M,
+    float TAU_S);
+
 
 /*
  * dim3 block = dim3(1);
@@ -107,6 +125,25 @@ __global__ void g_Spiking_wgrad(
         int T_REFRAC,
         float TAU_M,
         float TAU_S);
+
+/*
+ * dim3 block = dim3(batch, inputDim, outputAmount);
+ * dim3 thread= min(1024, outputDim);
+ */
+__global__ void g_Spiking_wgrad_spiketime(
+        int* inputs_time,
+        int* outputs_time,
+        int* batchPreFireCount,
+        int* batchFireCount,
+        float* curDelta,
+        float** wgradTmp,
+        int inputDim,
+        int outputDim,
+        int endTime,
+        int T_REFRAC,
+        float TAU_M,
+        float TAU_S);
+
 
 /*
  * block = dim3(outputDim * inputDim, outputAmount);
@@ -207,6 +244,18 @@ void Spiking::feedforward()
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("Spiking::g_Spiking_feedforward");
 
+    block = dim3(batch, outputAmount);
+    thread = dim3(min(outputDim, 1024));
+
+    // transform the binary response matrix to the spike times
+    g_response_2_spiketime<<<block, thread>>>(
+        outputs->getDev(),
+        outputs_time->getDev(),
+        outputDim,
+        endTime);
+    checkCudaErrors(cudaStreamSynchronize(0));
+	getLastCudaError("Spiking:g_response_2_spiketime");
+
 }
 
 void Spiking::backpropagation()
@@ -228,9 +277,19 @@ void Spiking::backpropagation()
 	    getLastCudaError("Spiking::g_getMaxCount_output");
 
         // modify the output spikes of the target neuron if it does not fire
+        // tricky: modify both the spike trains and output fire counts!
         g_modifySpikes_output<<<dim3(batch), dim3(1)>>>(outputs->getDev(), predict, fireCount->getDev(), maxCount->getDev(), endTime, outputDim);
         cudaStreamSynchronize(0);
         getLastCudaError("Spiking::g_modifySpikes_output");
+
+        // retransform the binary matrix to the spike times since the outputs might be changed
+        g_response_2_spiketime<<<dim3(batch), dim3(min(outputDim, 1024))>>>(
+            outputs->getDev(),
+            outputs_time->getDev(),
+            outputDim,
+            endTime);
+        checkCudaErrors(cudaStreamSynchronize(0));
+        getLastCudaError("Spiking:g_response_2_spiketime");
     }
 
     // compute preDelta: curDelta: batch * outputDIm; w: outputDim * inputDim
@@ -296,7 +355,8 @@ void Spiking::getGrad()
 {
     dim3 thread = dim3(min(1024, outputDim));
     dim3 block  = dim3(batch, inputDim);
-    cudaFuncSetCacheConfig(g_Spiking_wgrad,cudaFuncCachePreferL1);
+    cudaFuncSetCacheConfig(g_Spiking_wgrad_spiketime,cudaFuncCachePreferL1);
+    /*
     g_Spiking_wgrad<<<block, thread>>>(
         inputs->getDev(),
         outputs->getDev(),
@@ -308,9 +368,23 @@ void Spiking::getGrad()
         T_REFRAC,
         TAU_M,
         TAU_S);
+    */
+    g_Spiking_wgrad_spiketime<<<block, thread>>>(
+        inputs_time->getDev(),
+        outputs_time->getDev(),
+        preFireCount->getDev(),
+        fireCount->getDev(),
+        curDelta->getDev(),
+        wgradTmp.m_devPoint,
+        inputDim,
+        outputDim,
+        endTime,
+        T_REFRAC,
+        TAU_M,
+        TAU_S);
 
     checkCudaErrors(cudaStreamSynchronize(0));
-	getLastCudaError("g_Spiking_wgrad");
+	getLastCudaError("g_Spiking_wgrad_spiketime");
 
 	block  = dim3(outputDim * inputDim, outputAmount);
 	thread = dim3(batch);
@@ -385,7 +459,9 @@ Spiking::Spiking(std::string name)
 	SpikingLayerBase * preLayer = (SpikingLayerBase*)Layers::instance()->get(config->m_input);
 
 	inputs = preLayer->getSpikingOutputs();
+    inputs_time = preLayer->getSpikingTimeOutputs();
 	preDelta = preLayer->getCurDelta();
+    preFireCount = preLayer->getFireCount();
 	
     inputAmount  = preLayer->outputAmount;
     outputAmount = inputAmount;
@@ -405,6 +481,8 @@ Spiking::Spiking(std::string name)
     MARGIN          = config->m_margin; 
 
 	outputs  = new cuMatrix<bool>(batch, outputDim * endTime, outputAmount);
+    outputs_time = new cuMatrix<int>(batch, outputDim * endTime, outputAmount);
+
 	curDelta = new cuMatrix<float>(batch, outputDim, outputAmount);
     fireCount= new cuMatrix<int>(batch, outputDim, outputAmount);
     // only for the output
@@ -518,7 +596,7 @@ void Spiking::verify(const std::string& phrase)
             outputs->toCpu();
             checkMatrixIsSame(output_test_ref[0], outputs, outputDim);
         }
-   }
+    }
     printf("Verification for the layer: %s at %s phrase. Pased!!\n", m_name.c_str(), phrase.c_str());
 }
 
@@ -866,6 +944,55 @@ __device__ float d_Spiking_gradient(
  
 }
 
+/* given each input and output spike train of spike times, 
+ * compute the accumulative synaptic effect as the gradient
+ * input: input spikes: endTime * inputDim
+ * output: output spikes: endTime * outputDim
+ */
+__device__ float d_Spiking_gradient_spiketime(
+    int* output_time,
+    int* input_time,
+    int n_ospikes,
+    int n_ispikes,
+    float delta,
+    int o_idx,
+    int i_idx,
+    int outputDim,
+    int inputDim,
+    int endTime,
+    int T_REFRAC,
+    float TAU_M,
+    float TAU_S)
+{
+    float acc_response = 0.0f;
+    int t_post_last = 1;
+    for(int i = 0; i < n_ospikes; ++i){
+        int t_post = output_time[o_idx * endTime + i];
+        float sum = 0.0f;
+        
+        int ub = t_post;
+        int lb = max(1, int(t_post - 4*TAU_M));
+        for(int j = 0; j < n_ispikes; ++j){
+            int t_pre = input_time[i_idx * endTime + j];
+            if(t_pre < lb || t_pre >= ub)    continue;
+
+            int pre_time = t_pre + T_REFRAC;
+            if(pre_time > t_post)   continue;
+            int s = t_post - t_post_last;
+            int t = t_post - pre_time;
+            float factor = exp(-1*max(t - s, 0)/TAU_S)/(1 - TAU_S/TAU_M);
+            sum += factor * (exp(-1*min(s, t)/TAU_M) - exp(-1*min(s, t)/TAU_S));
+        }
+        t_post_last = t_post + T_REFRAC;
+        acc_response += sum;
+    }
+    float delta_w = delta * acc_response;
+    return delta_w;
+ 
+}
+
+
+
 /*
  * dim3 block = dim3(1);
  * dim3 thread= dim3(256);
@@ -988,11 +1115,14 @@ __global__ void g_modifySpikes_output(bool* outputs, int* y, int* fireCount, int
     bool* outputSpikes = outputs + batchId * endTime * outputDim;
     if(fireCount[target + batchId * outputDim] == 0)
     {
+        int count = 0;
         int interval = mCnt == 0 ? endTime/4 : endTime / mCnt;
         for(int t = interval; t < endTime; t += interval)
         {
             outputSpikes[target + t * outputDim] = true;
+            count++;
         }
+        fireCount[target + batchId * outputDim] = count;
     }
     
 }
@@ -1116,6 +1246,52 @@ __global__ void g_Spiking_wgrad(
         if(o_idx < outputDim)
         {
             float delta_w = d_Spiking_gradient(output, input, cDelta[o_idx], o_idx, i_idx, outputDim, inputDim, endTime, T_REFRAC, TAU_M, TAU_S);
+            wgrad[i_idx + o_idx * inputDim] = delta_w;
+        }
+    }
+
+}
+
+/*
+ * dim3 block = dim3(batch, inputDim, outputAmount);
+ * dim3 thread= min(1024, outputDim);
+ */
+__global__ void g_Spiking_wgrad_spiketime(
+        int* inputs_time,
+        int* outputs_time,
+        int* batchPreFireCount,
+        int* batchFireCount,
+        float* curDelta,
+        float** wgradTmp,
+        int inputDim,
+        int outputDim,
+        int endTime,
+        int T_REFRAC,
+        float TAU_M,
+        float TAU_S)
+{
+    int batchId = blockIdx.x;
+    int i_idx   = blockIdx.y;
+    int ok      = blockIdx.z;
+
+    int wSize        = outputDim * inputDim;
+    int inputSize2   = endTime * inputDim;
+    int outputSize2  = endTime * outputDim;
+    int curDeltaSize = outputDim;
+
+    float* wgrad  = wgradTmp[ok] + batchId * wSize;
+    int* input_time       = inputs_time + batchId * inputSize2;
+    int* output_time      = outputs_time + batchId * outputSize2;
+    int* input_fireCount   = batchPreFireCount + batchId * outputDim;
+    int* output_fireCount = batchFireCount + batchId * outputDim;
+    float* cDelta = curDelta + batchId * curDeltaSize;
+    
+    for(int i = 0; i < outputDim; i += blockDim.x)
+    {
+        int o_idx = i + threadIdx.x;
+        if(o_idx < outputDim)
+        {
+            float delta_w = d_Spiking_gradient_spiketime(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], cDelta[o_idx], o_idx, i_idx, outputDim, inputDim, endTime, T_REFRAC, TAU_M, TAU_S);
             wgrad[i_idx + o_idx * inputDim] = delta_w;
         }
     }

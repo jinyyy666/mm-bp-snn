@@ -341,3 +341,33 @@ __global__ void g_convert(float* cuPool, float*cuPoolToFlActi, int batch, int si
 	}
 }
 
+
+/*
+* function: transform the binary response matrix (batch, outputDim * endTime) to spike times matrix 
+* (batch, outputDim * "num of spikes"), directly store the spike times. 
+* blocks  : dim3(batch)
+* threads : dim3(min(1024, outputDim))
+*/
+__global__ void g_response_2_spiketime(bool* outputs, int* outputs_time, int outputDim, int endTime)
+{
+    int batchId = blockIdx.x;
+    bool* output = outputs + batchId * endTime * outputDim;
+    int* output_time = outputs_time +  batchId * endTime * outputDim;
+
+    for(int i = 0; i < outputDim; i += blockDim.x)
+    {
+        int o_idx = i + threadIdx.x;
+        if(o_idx < outputDim)
+        {
+            int col_idx = 0;
+            for(int time = 0; time < endTime; ++time)
+            {
+                if(output[o_idx + time * outputDim])
+                {
+                    output_time[o_idx * endTime + col_idx] = time;
+                    col_idx++;
+                }
+            }
+        }
+    }
+}

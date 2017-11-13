@@ -60,6 +60,7 @@ class SpikingLayerBase: public LayerBase
 {
 public:
     virtual cuMatrix<bool>* getSpikingOutputs() = 0;
+    virtual cuMatrix<int>*  getSpikingTimeOutputs() = 0;
 	int inputDim;
 	int outputDim;
     int endTime;

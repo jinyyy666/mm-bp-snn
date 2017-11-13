@@ -428,6 +428,10 @@ void runNMnist(){
 	nlrate.push_back(0.00001f);   nMomentum.push_back(0.00f);  epoCount.push_back(1);
 #else
 	nlrate.push_back(0.00001f);   nMomentum.push_back(0.90f);  epoCount.push_back(10);
+    nlrate.push_back(0.000009f);   nMomentum.push_back(0.90f);  epoCount.push_back(10);
+	nlrate.push_back(0.000008f);   nMomentum.push_back(0.90f);  epoCount.push_back(10);
+	nlrate.push_back(0.000007f);   nMomentum.push_back(0.90f);  epoCount.push_back(10);
+	nlrate.push_back(0.000006f);   nMomentum.push_back(0.90f);  epoCount.push_back(10);
 #endif
 
 	start = clock();

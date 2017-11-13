@@ -2,7 +2,7 @@
 #NON_LINEARITY = NL_SIGMOID , NL_TANH , NL_RELU#
 IS_GRADIENT_CHECKING = false;   #is true when debug#
 SHOWIMAGE = false;              #show the images after transformation#
-TEST_EPOCH = 10;                 #the period to get the test dataset's error rate#
+TEST_EPOCH = 100;                 #the period to get the test dataset's error rate#
 WHITE_NOISE = 0.0;  
 
 
@@ -13,8 +13,8 @@ END_TIME = 320;                 #The spike train duration#
 
 TRAIN_SAMPLES = 60000;              # number of train/test samples#
 TEST_SAMPLES = 10000;
-TRAIN_DATA_PATH = nmnist_400/train;  # train and test path for the speech samples #
-TEST_DATA_PATH =  nmnist_400/test;    
+TRAIN_DATA_PATH = nmnist_300/train;  # train and test path for the speech samples #
+TEST_DATA_PATH =  nmnist_300/test;    
 
 [
 LAYER = DATASPIKING;

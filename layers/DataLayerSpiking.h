@@ -34,9 +34,10 @@ public:
 	}
 
 	cuMatrix<bool>* getSpikingOutputs(){return outputs;}
+    cuMatrix<int>*  getSpikingTimeOutputs(){return outputs_time;}
+
     cuMatrix<float>* getOutputs(){return NULL;}
 	cuMatrix<float>* getCurDelta(){return NULL;}
-    cuMatrix<int>* getFireCount(){return NULL;}
 
 	int getOutputAmount(){
 		return outputAmount;
@@ -45,6 +46,10 @@ public:
 	int getOutputDim(){
 		return outputDim;
 	}
+    
+    cuMatrix<int>* getFireCount(){
+        return fireCount;
+    }
 
 	void trainData();
 	void testData();
@@ -55,6 +60,8 @@ public:
 	void getBatchSpikesWithStreams(cuMatrixVector<bool>& inputs, int start);
 private:
 	cuMatrix<bool>* outputs;
+    cuMatrix<int>* outputs_time;
+    cuMatrix<int>* fireCount;
 	cuMatrixVector<bool> batchSpeeches[2]; // batch size speeches,one for current read, one for buffer
     int myId; // use to asynchoronously load the data
 	int batch;

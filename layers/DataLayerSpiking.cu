@@ -32,6 +32,9 @@ DataLayerSpiking::DataLayerSpiking(std::string name){
 	inputAmount = Config::instance()->getChannels();
 	outputAmount= inputAmount;
 	outputs = new cuMatrix<bool>(batch, outputDim * endTime, outputAmount);
+    outputs_time = new cuMatrix<int>(batch, outputDim * endTime, outputAmount);
+
+    fireCount = new cuMatrix<int>(batch, outputDim, outputAmount);
 
     for(int i = 0; i < 2; ++i){
         for(int j = 0; j < batch; j++){
@@ -71,6 +74,31 @@ __global__ void g_dataLayer_spiking_feedforward(
 	}
 }
 
+/*
+ * dim3 block = dim3(batch);
+ * dim3 thread= dim3(min(outputDim, 1024));
+*/
+__global__ void g_dataLayer_get_fireCount(
+    bool* outputs,
+    int* batchfireCount,
+    int outputDim,
+    int endTime)
+{
+	int batchId = blockIdx.x;
+
+    bool* output = outputs + batchId * endTime * outputDim;
+    int* fireCount = batchfireCount + batchId * outputDim;
+
+    for(int i = 0; i < outputDim; i += blockDim.x)
+    {
+        int o_idx = i + threadIdx.x;
+        int sum = 0;
+        for(int time = 0; time < endTime; ++time)   sum += output[o_idx + time * outputDim];
+        fireCount[o_idx] = sum;
+    }
+}
+
+
 //* simply copy the input data to the output
 void DataLayerSpiking::feedforward(){
 	dim3 block = dim3(batch, outputAmount);
@@ -83,7 +111,26 @@ void DataLayerSpiking::feedforward(){
         outputs->cols);
 	checkCudaErrors(cudaStreamSynchronize(0));
 	getLastCudaError("DataLayerSpiking:feedforward");
-    outputs->toCpu();
+
+    //* get the fire counts for transforming the binary response to spike times    
+    thread = dim3(min(outputDim, 1024));
+    g_dataLayer_get_fireCount<<<block, thread>>>(
+        outputs->getDev(),
+        fireCount->getDev(),
+        outputDim,
+        endTime);
+	checkCudaErrors(cudaStreamSynchronize(0));
+	getLastCudaError("DataLayerSpiking:g_dataLayer_get_fireCount");
+    
+
+    g_response_2_spiketime<<<block, thread>>>(
+        outputs->getDev(),
+        outputs_time->getDev(),
+        outputDim,
+        endTime);
+    checkCudaErrors(cudaStreamSynchronize(0));
+	getLastCudaError("DataLayerSpiking:g_response_2_spiketime");
+
 }; 
 
 void DataLayerSpiking::trainData()
