@@ -151,8 +151,10 @@ void DataLayerSpiking::synchronize(){
 void DataLayerSpiking::getBatchSpikesWithStreams(cuMatrixVector<bool>& inputs, int start){
     int id = 1 - this->myId;
     for(size_t i = 0; i < this->batchSpeeches[id].size(); i++){
+        inputs[i+start]->sparseToDense();
         memcpy(this->batchSpeeches[id][i]->getHost(), inputs[i + start]->getHost(), sizeof(bool) * this->batchSpeeches[id][i]->getLen());
         this->batchSpeeches[id][i]->toGpu(this->stream1);
+        inputs[i+start]->freeCpuMem();
         //this->batchSpeeches[i]->toGpu();
     }
 }

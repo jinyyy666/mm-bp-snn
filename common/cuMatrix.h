@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vector>
+#include <assert.h>
 #include "helper_cuda.h"
 #include "MemoryMonitor.h"
 
@@ -15,7 +17,7 @@ class cuMatrix
 {
 public:
 	/*constructed function with hostData*/
-	cuMatrix(T *_data, int _n,int _m, int _c):rows(_n), cols(_m), channels(_c), hostData(NULL), devData(NULL){
+	cuMatrix(T *_data, int _n,int _m, int _c):rows(_n), cols(_m), channels(_c), hostData(NULL), devData(NULL), spikeTimes(NULL){
 		/*malloc host data*/
 		mallocHost();
 		/*deep copy */
@@ -23,10 +25,14 @@ public:
 	}
 	
 	/*constructed function with rows and cols*/
-	cuMatrix(int _n,int _m, int _c):rows(_n), cols(_m), channels(_c), hostData(NULL), devData(NULL){
+	cuMatrix(int _n,int _m, int _c):rows(_n), cols(_m), channels(_c), hostData(NULL), devData(NULL), spikeTimes(NULL){
 	}
 
-	/*free cuda memery*/
+    /*constructed function with spike times */
+    cuMatrix(int _n, int _m, int _c, std::vector<std::vector<int> > * sp_time):rows(_n), cols(_m), channels(_c), hostData(NULL), devData(NULL), spikeTimes(sp_time){
+    }
+
+	/*free cuda memory*/
 	void freeCudaMem(){
 		if(NULL != devData){
 			MemoryMonitor::instance()->freeGpuMemory(devData);
@@ -34,13 +40,38 @@ public:
 		}
 	}
 
+    /*free cpu memory*/
+    void freeCpuMem(){
+        if(NULL != hostData){
+            MemoryMonitor::instance()->freeCpuMemory(hostData);
+            hostData = NULL;
+        }
+    }
+
 	/*destruction function*/
 	~cuMatrix(){
 		if(NULL != hostData)
 			MemoryMonitor::instance()->freeCpuMemory(hostData);
 		if(NULL != devData)
 			MemoryMonitor::instance()->freeGpuMemory(devData);
+        if(NULL != spikeTimes)
+            delete spikeTimes;
 	}
+
+    /* convert the spikes times (sparse) to the dense binary response matrix */
+    void sparseToDense(){
+        if(spikeTimes == NULL)  return;
+        assert(hostData == NULL);
+        mallocHost();
+        for(int i = 0; i < spikeTimes->size(); ++i){
+            for(int j = 0; j < (*spikeTimes)[i].size(); ++j){
+                int time = (*spikeTimes)[i][j];
+                if(time < rows && i < cols)
+    		        hostData[time * cols + i] = true;
+            }
+        }
+    }
+
 
 	/*copy the device data to host data*/ 
 	void toCpu(){
@@ -138,6 +169,9 @@ private:
 
 	/*device data*/
 	T *devData;
+
+    /* spike time data*/
+    std::vector<std::vector<int> > * spikeTimes;
 private:
 	void mallocHost(){
 		if(NULL == hostData){

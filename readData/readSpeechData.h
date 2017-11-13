@@ -21,13 +21,12 @@ int readSpeechData(cuMatrixVector<bool> &x,
 	int number_of_speeches,
 	int input_neurons,
     int end_time,
-    int CLS,
-    bool is_dump);
+    int CLS);
 
 //* read the labels
 int readSpeechLabel(const std::vector<int>& labels, cuMatrix<int>* &mat);
 
 //* read the samples and label (encoded in the directory)
-int readSpeech(std::string path, cuMatrixVector<bool>& x, std::vector<int>& labels, int num, int input_neurons, int end_time, int CLS, bool is_dump);
+int readSpeech(std::string path, cuMatrixVector<bool>& x, std::vector<int>& labels, int num, int input_neurons, int end_time, int CLS);
 
 #endif

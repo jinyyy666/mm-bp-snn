@@ -39,7 +39,8 @@ void file_finder(const std::string& path, cuMatrixVector<bool>& x, std::vector<i
             // this is indeed the data file:
             std::string suffix = ".dat";
             assert(file_name.length() >= suffix.length() && file_name.substr(file_name.length() - suffix.length()) == suffix);
-            read_each_nmnist(full_file_name, x, end_time, input_neurons);
+            //read_each_nmnist(full_file_name, x, end_time, input_neurons);
+            read_each_nmnist_inside(full_file_name, x, end_time, input_neurons);
             labels.push_back(cur_label);
             sample_count++;
             printf("read %2d%%", 100 * sample_count / num_of_samples);
@@ -76,6 +77,40 @@ void read_each_nmnist(const std::string& filename, cuMatrixVector<bool>& x, int 
     x.push_back(tpmat); 
     f_in.close();
 }
+
+
+//* read each sample of NMnist dataset in terms of spikes time, do not translate them into binary
+//* tricky: do this to avoid the issue that the data cannot be loaded into the main memory
+void read_each_nmnist_inside(const std::string& filename, cuMatrixVector<bool>& x, int end_time, int input_neurons)
+{
+    std::ifstream f_in(filename.c_str());
+    if(!f_in.is_open()){
+        std::cout<<"Cannot open the file: "<<filename<<std::endl;
+        exit(EXIT_FAILURE);
+    }
+    vector<vector<int> > * sp_time = new vector<vector<int> >(input_neurons, vector<int>());
+    int index = 0;
+    std::string times;
+    while(getline(f_in, times)){
+        std::istringstream iss(times);
+        int time;
+        while(iss>>time){
+            // tricky! the nmnist start from time = 0 but to match with our
+            // CPU simulation, in CPU, we have shift 1 by one. We do the same here for GPU
+            if(time + 1 >= end_time || index >= input_neurons) continue;
+            (*sp_time)[index].push_back(time+1);
+        }
+        index++;
+    }
+
+    cuMatrix<bool>* tpmat = new cuMatrix<bool>(end_time, input_neurons, 1, sp_time);
+    tpmat->freeCudaMem();
+
+    x.push_back(tpmat); 
+    f_in.close();
+}
+
+
 
 
 //* read the train data and label of the NMnist at the same time

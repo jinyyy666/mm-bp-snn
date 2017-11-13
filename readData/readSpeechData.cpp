@@ -9,7 +9,7 @@
 
 
 //* the BSA algorithm for encoding the continuous value into the spike trains
-void BSA(const std::vector<float>& analog, int col, int step_analog, int step_spikeT, cuMatrix<bool>* & mat)
+void BSA(const std::vector<float>& analog, int input_channel, int step_analog, int step_spikeT, vector<vector<int> >* & mat, int end_time)
 {
     int length_kernel = 24;
     int length_signal = (analog.size()*step_analog)/step_spikeT + 24;
@@ -41,9 +41,9 @@ void BSA(const std::vector<float>& analog, int col, int step_analog, int step_sp
             error2 += (temp<0) ? -temp : temp;
         }
         if(error1 < (error2-threshold)){
-            // set the input matrix:
+            // set the spike time matrix:
             int time = i + 1;
-            if(time < mat->rows)  mat->set(time, col, 0, true);
+            if(time < end_time)  (*mat)[input_channel].push_back(time);
 
             for(j = 0; j < length_kernel; j++) signal[i+j] -= kernel[j];
         }
@@ -54,7 +54,7 @@ void BSA(const std::vector<float>& analog, int col, int step_analog, int step_sp
 }
 
 //* recursively find the files
-void file_finder(const std::string& path, cuMatrixVector<bool>& x, std::vector<int>& labels, int cur_label, int& sample_count, int num_of_samples, int end_time, int input_neurons, int CLS, bool is_dump)
+void file_finder(const std::string& path, cuMatrixVector<bool>& x, std::vector<int>& labels, int cur_label, int& sample_count, int num_of_samples, int end_time, int input_neurons, int CLS)
 {
     DIR *dir;
     struct dirent *ent; 
@@ -78,16 +78,13 @@ void file_finder(const std::string& path, cuMatrixVector<bool>& x, std::vector<i
         
         if(is_directory){
             assert(cur_label >= 0 && cur_label < CLS);
-            file_finder(full_file_name, x, labels, cur_label, sample_count, num_of_samples, end_time, input_neurons, CLS, is_dump); 
+            file_finder(full_file_name, x, labels, cur_label, sample_count, num_of_samples, end_time, input_neurons, CLS); 
         }
         else{
             // this is indeed the data file:
             string suffix = ".dat";
             assert(file_name.length() >= suffix.length() && file_name.substr(file_name.length() - suffix.length()) == suffix);
-            if(is_dump)
-                read_each_speech_dump(full_file_name, x, end_time, input_neurons);
-            else
-                read_each_speech(full_file_name, x, end_time, input_neurons);
+            read_each_speech(full_file_name, x, end_time, input_neurons);
 
             labels.push_back(cur_label);
             sample_count++;
@@ -107,8 +104,7 @@ int readSpeech(
         int num,
         int input_neurons,
         int end_time,
-        int CLS,
-        bool is_dump)
+        int CLS)
 {
     //* read the data from the path
     struct stat sb;
@@ -120,7 +116,7 @@ int readSpeech(
     if(path[path.length() - 1] == '/')  path = path.substr(0, path.length() - 1);
     //* recursively read the samples in the directory
     int sample_count = 0;
-    file_finder(path, x, labels, -1, sample_count, num, end_time, input_neurons, CLS, is_dump);
+    file_finder(path, x, labels, -1, sample_count, num, end_time, input_neurons, CLS);
     assert(x.size() == num);
     assert(x.size() == labels.size());
 
@@ -135,9 +131,6 @@ void read_each_speech(const std::string& filename, cuMatrixVector<bool>& x, int 
         std::cout<<"Cannot open the file: "<<filename<<std::endl;
         exit(EXIT_FAILURE);
     }
-    cuMatrix<bool>* tpmat = new cuMatrix<bool>(nrows, ncols, 1);
-    tpmat->freeCudaMem();
-    
     // get all the analog values of the speeches
     std::vector<std::vector<float> > spectrum;
     std::string analogs;
@@ -156,48 +149,16 @@ void read_each_speech(const std::string& filename, cuMatrixVector<bool>& x, int 
     }
 
     // perform the BSA algorithm for each channel of the spectrum
+    vector<vector<int> > * sp_time = new vector<vector<int> >(ncols, vector<int>());
+    int end_time = nrows;
     for(int c = 0; c < spectrum.size(); ++c){
-        BSA(spectrum[c], c, 10, 1, tpmat);
+        BSA(spectrum[c], c, 10, 1, sp_time, end_time);
     }
-
+    cuMatrix<bool>* tpmat = new cuMatrix<bool>(nrows, ncols, 1, sp_time);
+    tpmat->freeCudaMem(); 
     x.push_back(tpmat);
 }
 
-
-//* read a speech file given the filename
-cuMatrix<bool>* read_single_speech(const std::string& filename, int nrows, int ncols)
-{
-    std::ifstream f_in(filename.c_str());
-    if(!f_in.is_open()){
-        std::cout<<"Cannot open the file: "<<filename<<std::endl;
-        exit(EXIT_FAILURE);
-    }
-    cuMatrix<bool>* tpmat = new cuMatrix<bool>(nrows, ncols, 1);
-    tpmat->freeCudaMem();
-    
-    // get all the analog values of the speeches
-    std::vector<std::vector<float> > spectrum;
-    std::string analogs;
-    while(getline(f_in, analogs)){
-        std::istringstream iss(analogs);
-        float analog;
-        vector<float> tmp;
-        while(iss>>analog)  tmp.push_back(analog);
-        spectrum.push_back(tmp);
-    }
-    f_in.close();
-    if(spectrum.size() != ncols){
-        std::cout<<"The number of channels in the raw speech file: "<<spectrum.size()
-                 <<" does not match the number of input neuron: "<<ncols<<std::endl;
-        exit(EXIT_FAILURE);
-    }
-
-    // perform the BSA algorithm for each channel of the spectrum
-    for(int c = 0; c < spectrum.size(); ++c){
-        BSA(spectrum[c], c, 10, 1, tpmat);
-    }
-    return tpmat;
-}
 
 //* read each speech from the dump file of the CPU simulator
 void read_each_speech_dump(const std::string& filename, cuMatrixVector<bool>& x, int nrows, int ncols)
@@ -240,12 +201,11 @@ int readSpeechData(
         int number_of_images,
         int input_neurons,
         int end_time,
-        int CLS,
-        bool is_dump)
+        int CLS)
 {
 
     std::vector<int> labels;
-    int len = readSpeech(path, x, labels, number_of_images, input_neurons, end_time, CLS, is_dump);
+    int len = readSpeech(path, x, labels, number_of_images, input_neurons, end_time, CLS);
     //* read speech label into cuMatrix
     y = new cuMatrix<int>(len, 1, 1);
     int t = readSpeechLabel(labels, y);

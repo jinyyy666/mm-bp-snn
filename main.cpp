@@ -469,8 +469,8 @@ void runSpeech(){
     int end_time = config->getEndTime();
     int train_samples = config->getTrainSamples();
     int test_samples = config->getTestSamples();
- 	readSpeechData(trainX, trainY, config->getTrainPath(), train_samples, input_neurons, end_time, nclasses, false);
- 	readSpeechData(testX , testY,  config->getTestPath(), test_samples, input_neurons, end_time, nclasses, false);
+ 	readSpeechData(trainX, trainY, config->getTrainPath(), train_samples, input_neurons, end_time, nclasses);
+ 	readSpeechData(testX , testY,  config->getTestPath(), test_samples, input_neurons, end_time, nclasses);
 
 	MemoryMonitor::instance()->printCpuMemory();
 	MemoryMonitor::instance()->printGpuMemory();
