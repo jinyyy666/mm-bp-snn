@@ -94,6 +94,10 @@ void read_each_nmnist_inside(const std::string& filename, cuMatrixVector<bool>& 
     while(getline(f_in, times)){
         std::istringstream iss(times);
         int time;
+        // each line start with the input neuron index (1 based)
+        iss>>index;
+        assert(index> 0 && index <= input_neurons);
+        index--;
         while(iss>>time){
             // tricky! the nmnist start from time = 0 but to match with our
             // CPU simulation, in CPU, we have shift 1 by one. We do the same here for GPU
