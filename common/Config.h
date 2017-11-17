@@ -594,7 +594,7 @@ public:
 	}
 	void setLrate(float _lrate){
 		lrate = _lrate;
-	}
+    }
 	float getLrate(){
 		return lrate;
 	}
@@ -728,6 +728,7 @@ public:
     }
 	void setTraining(bool isTrainning){training = isTrainning;}
 	bool isTraining(){return training;}
+    bool hasDynamicThreshold(){return m_allowDynamicThreshold;}
 
 private:
 	void deleteComment();
@@ -770,6 +771,7 @@ private:
 	int m_classes;
     int m_endTime;
 	bool training;
+    bool m_allowDynamicThreshold;
 };
 
 #endif

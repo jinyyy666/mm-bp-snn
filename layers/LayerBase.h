@@ -61,6 +61,9 @@ class SpikingLayerBase: public LayerBase
 public:
     virtual cuMatrix<bool>* getSpikingOutputs() = 0;
     virtual cuMatrix<int>*  getSpikingTimeOutputs() = 0;
+	virtual void printFireCount() = 0;
+    virtual void getDeltaVth() = 0;
+    virtual void updateVth() = 0;
 	int inputDim;
 	int outputDim;
     int endTime;

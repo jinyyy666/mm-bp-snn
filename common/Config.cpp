@@ -412,11 +412,10 @@ void Config:: get_layers_config(string &str){
             std::string local_inb_strength_str = get_word_type(layers[i], "localInbStrength");
             float local_inb_strength = local_inb_strength_str == std::string("NULL") ? 0 : atof(local_inb_strength_str.c_str());
             float undesired_level = 0, desired_level = 0, margin = 0;
-            if(name == "output"){
-                undesired_level = get_word_float(layers[i], "UNDESIRED_LEVEL");
-                desired_level = get_word_float(layers[i], "DESIRED_LEVEL");
-                margin = get_word_float(layers[i], "MARGIN");    
-            }
+            undesired_level = get_word_float(layers[i], "UNDESIRED_LEVEL");
+            desired_level = get_word_float(layers[i], "DESIRED_LEVEL");
+            margin = get_word_float(layers[i], "MARGIN");    
+        
             std::map<std::string, std::string> ref_paths;
             ref_paths[std::string("refWeightPath")] = get_word_type(layers[i], "refWeightPath");
             ref_paths[std::string("refLWeightPath")] = get_word_type(layers[i], "refLWeightPath");
@@ -490,7 +489,12 @@ void Config::init(std::string path)
     /*IS_GRADIENT_CHECKING*/
     bool is_gradient_checking = get_word_bool(m_configStr, "IS_GRADIENT_CHECKING");
     m_isGradientChecking = new ConfigGradient(is_gradient_checking);
-    sprintf(logStr, "Is Gradientt Checking : %d\n", is_gradient_checking);
+    sprintf(logStr, "Is Gradient Checking : %d\n", is_gradient_checking);
+    LOG(logStr, "Result/log.txt");
+    
+    /*DYNAMIC_THRESHOLD*/
+    m_allowDynamicThreshold = get_word_bool(m_configStr, "DYNAMIC_THRESHOLD");
+    sprintf(logStr, "Allow Dynamic Threshold : %d\n", is_gradient_checking);
     LOG(logStr, "Result/log.txt");
 
     /*BATCH_SIZE*/

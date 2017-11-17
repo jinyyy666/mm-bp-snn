@@ -123,15 +123,21 @@ void getSpikingNetworkCost(int* y)
     }
 
     /*backpropagation*/
+    bool has_dynamic_threshold = Config::instance()->hasDynamicThreshold(); 
     for(int i = (int)spiking_que.size() - 1; i >=0; i--){
         ConfigBase* top = spiking_que[i];
         if(top->m_name == std::string("reservoir")) continue;
 
-        LayerBase* layer = Layers::instance()->get(top->m_name);
+        SpikingLayerBase* layer = (SpikingLayerBase*)Layers::instance()->get(top->m_name);
 
         layer->backpropagation();
         layer->getGrad();
         layer->updateWeight();
+        if(has_dynamic_threshold && top->m_name != std::string("output"))
+        {
+            layer->getDeltaVth();
+            layer->updateVth();
+        }
     }
     cudaStreamSynchronize(Layers::instance()->get_stream());
     getLastCudaError("updateWB");
@@ -310,7 +316,17 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
 
     float my_start = (float)clock();
     predictTestRate(x, y, testX, testY, batch, nclasses, handle);
-    float my_end = (float)clock();         
+    float my_end = (float)clock();
+    sprintf(logStr, "===================output fire counts================\n");
+    LOG(logStr, "Result/log.txt");
+    y->toCpu();
+    printf("First train sample has label: %d\n", y->get(0, 0, 0));
+    for(int i = 0; i < (int)spiking_que.size(); i++){
+        SpikingLayerBase* layer = (SpikingLayerBase*) Layers::instance()->get(spiking_que[i]->m_name);
+        layer->printFireCount();
+    }
+
+
     sprintf(logStr, "time spent on test : time=%.03lfs\n", (float) (my_end - my_start) / CLOCKS_PER_SEC);
     LOG(logStr, "Result/log.txt");
 
@@ -391,6 +407,16 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
         sprintf(logStr, "test %.2lf%%/%.2lf%%\n", 100.0 * cuSCorrect->get(0, 0, 0) / testX.size(),
                 100.0 * cuSCurCorrect / testX.size());
         LOG(logStr, "Result/log.txt");
+
+        sprintf(logStr, "===================output fire counts================\n");
+        LOG(logStr, "Result/log.txt");
+        testY->toCpu();
+        printf("First test sample has label: %d\n", testY->get(0, 0, 0));
+        for(int i = 0; i < (int)spiking_que.size(); i++){
+            SpikingLayerBase* layer = (SpikingLayerBase*) Layers::instance()->get(spiking_que[i]->m_name);
+            layer->printFireCount();
+        }
+
 
         if(epo == 0){
             MemoryMonitor::instance()->printCpuMemory();

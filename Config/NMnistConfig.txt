@@ -1,14 +1,15 @@
 #Comment#
 #NON_LINEARITY = NL_SIGMOID , NL_TANH , NL_RELU#
 IS_GRADIENT_CHECKING = false;   #is true when debug#
+DYNAMIC_THRESHOLD = false;       # allow dynamic threshold#
 SHOWIMAGE = false;              #show the images after transformation#
 TEST_EPOCH = 100;                 #the period to get the test dataset's error rate#
 WHITE_NOISE = 0.0;  
 
 
-BATCH_SIZE = 128;                
+BATCH_SIZE = 128;
 CHANNELS = 1;                   #1, 3, 4#
-END_TIME = 420;                 #The spike train duration#
+END_TIME = 480;                 #The spike train duration#
 
 
 TRAIN_SAMPLES = 60000;              # number of train/test samples#
@@ -29,12 +30,15 @@ NAME  = hidden_0;
 NUM_NEURONS = 800;
 INPUT = data;
 WEIGHT_DECAY = 0.0;
-VTH = 20;
+VTH = 15;
 T_REFRAC = 2;
 TAU_M = 64;
 TAU_S = 8;
-initW = 10;
+initW = 0.2;
 initType = Bernoulli;
+DESIRED_LEVEL = 45;
+UNDESIRED_LEVEL = 15;
+MARGIN = 5;
 ]
 
 [

@@ -173,7 +173,7 @@ __global__ void g_Spiking_feedforward(
     int endTime,
 	int inputAmount,
 	int outputAmount,
-    float vth,
+    float* vth,
     int T_REFRAC,
     float TAU_M,
     float TAU_S);
@@ -237,7 +237,7 @@ void Spiking::feedforward()
         endTime,
         inputAmount,
         outputAmount,
-        vth,
+        vth->getDev(),
         T_REFRAC,
         TAU_M,
         TAU_S);
@@ -438,6 +438,122 @@ void Spiking::updateWeight()
 		Config::instance()->getLrate());
 }
 
+/*
+ * dim3 block = dim3(batch)
+ * dim3 thread = min(1024, outputDim)
+ */
+__global__ void g_Spiking_delta_vth(int* batchFireCount, float * vth, float * vthDeltaTmp, int outputDim, float DESIRED_LEVEL, float MARGIN)
+{
+    int batchId = blockIdx.x;
+    float * vthDelta = vthDeltaTmp + batchId * outputDim;
+    int * fireCount = batchFireCount + batchId * outputDim;
+    for(int i = 0; i < outputDim; i += blockDim.x)
+    {
+        int o_idx = i + threadIdx.x;
+        if(o_idx < outputDim)
+        {
+            if(fireCount[o_idx] == 0 && vth[o_idx] > 5.0f)
+                vthDelta[o_idx] = 0.0001 * outputDim;
+            else if(fireCount[o_idx] > DESIRED_LEVEL + MARGIN && vth[o_idx] < 25.0f)
+                vthDelta[o_idx] = -0.0001 * outputDim;
+        }
+    }
+}
+
+/*
+ * dim3 block = dim3(outputDim)
+ * dim3 thread = min(batch)
+ */
+__global__ void g_Spiking_delta_vthAdd(float* vthDeltaTmp, float* vthDelta, int batch, int vthArea)
+{
+    extern __shared__ float _sum[];
+        
+    int vid = blockIdx.x;
+    int tid = threadIdx.x;
+
+    _sum[tid] = 0;
+    __syncthreads();
+    for(int i = 0; i < batch; i += blockDim.x)
+    {
+        int b = i + tid;
+        if(b < batch)
+        {
+            _sum[tid] += vthDeltaTmp[b * vthArea + vid];
+        }
+    }
+    __syncthreads();
+    int len = blockDim.x;
+    while(len != 1)
+	{
+		__syncthreads();
+		int skip = (len + 1) >> 1;
+		if(tid < skip && (tid + skip) < len)
+		{
+			_sum[tid] += _sum[tid + skip];
+		}
+		len = skip;
+	}
+    if(tid == 0)
+        vthDelta[vid] = _sum[0] / batch;
+}
+
+
+void Spiking::getDeltaVth()
+{
+    dim3 thread = dim3(min(1024, outputDim));
+    dim3 block = dim3(batch);
+    cudaFuncSetCacheConfig(g_Spiking_delta_vth, cudaFuncCachePreferL1);
+    g_Spiking_delta_vth<<<block, thread>>>(
+        fireCount->getDev(),
+        vth->getDev(),
+        vthDeltaTmp->getDev(),
+        outputDim,
+        DESIRED_LEVEL,
+        MARGIN);
+    
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("g_Spiking_delta_vth");
+    
+    block  = dim3(outputDim);
+	thread = dim3(batch);
+   
+    g_Spiking_delta_vthAdd<<<block, thread, sizeof(float) * batch>>>(
+        vthDeltaTmp->getDev(),
+        vthDelta->getDev(),
+        batch,
+        vth->getArea());
+
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("g_Spiking_delta_vthAdd");
+
+}
+
+/*
+ * dim3 block = dim3(1)
+ * dim3 thread = min(256, outputDim)
+ */
+__global__ void g_Spiking_vth_vecAdd(float * vthDelta, float * vth, int lenVth)
+{
+    for(int i = 0; i < lenVth; i += blockDim.x)
+    {
+        int id = i + threadIdx.x;
+        if(id < lenVth)
+        {
+            vth[id] -= vthDelta[id];
+        }
+    }
+}
+
+void Spiking::updateVth()
+{
+    dim3 block = 1;
+    dim3 thread = min(256, outputDim);
+    g_Spiking_vth_vecAdd<<<block, thread, 0, Layers::instance()->get_stream()>>>(
+        vthDelta->getDev(),
+        vth->getDev(),
+        vth->getLen());
+}
+
 __global__ void g_weight_cp_test(float ** ws, int nrows, int ncols)
 {
     int weight_size = nrows * ncols;
@@ -471,7 +587,6 @@ Spiking::Spiking(std::string name)
     endTime   = Config::instance()->getEndTime(); 
 	batch     = Config::instance()->getBatchSize();
 	lambda    = config->m_weightDecay;
-    vth       = config->m_vth;
     T_REFRAC  = config->m_t_ref;
     TAU_M     = config->m_tau_m;
     TAU_S     = config->m_tau_s;    
@@ -509,6 +624,10 @@ Spiking::Spiking(std::string name)
             w_laterial.push_back(new cuMatrix<float>(outputDim, outputDim, 1));
         }
 	}
+
+    vth = new cuMatrix<float>(outputDim, 1, 1);
+    vthDelta = new cuMatrix<float>(outputDim, 1, 1);
+    vthDeltaTmp = new cuMatrix<float>(batch, outputDim, 1);
 
 	w.toGpu();
 	b.toGpu();
@@ -692,7 +811,14 @@ void Spiking::initRandom()
     }
     if(config->hasLaterialWeight()){
         initLaterial();
-    }	
+    }
+    
+    // initialize vth
+    float threshold = config->m_vth;
+    for(int i = 0; i < outputDim; ++i){
+        vth->set(i, 0, 0, threshold);
+    }
+    vth->toGpu();
 }
 
 void Spiking::initFromCheckpoint(FILE* file)
@@ -1143,7 +1269,7 @@ __global__ void g_Spiking_feedforward(
     int endTime,
 	int inputAmount,
 	int outputAmount,
-    float vth,
+    float* vth,
     int T_REFRAC,
     float TAU_M,
     float TAU_S)
@@ -1171,6 +1297,7 @@ __global__ void g_Spiking_feedforward(
         {
             float v  = 0.0f;
             float ep = 0.0f;
+            float threshold = vth[o_idx];
             int t_ref= 0;
             float response = 0.0f;
             int fire_count = 0;
@@ -1199,10 +1326,10 @@ __global__ void g_Spiking_feedforward(
                 }
             
                 // 5. Fire or not
-                curOutput[o_idx + t * outputDim] = v > vth ?  true : false;
-                t_ref = v > vth ? T_REFRAC : t_ref;
-                fire_count += v > vth ? 1 : 0;
-                v = v > vth ? 0 : v;
+                curOutput[o_idx + t * outputDim] = v > threshold ?  true : false;
+                t_ref = v > threshold ? T_REFRAC : t_ref;
+                fire_count += v > threshold ? 1 : 0;
+                v = v > threshold ? 0 : v;
             }
             curFireCount[o_idx] = fire_count; 
         }

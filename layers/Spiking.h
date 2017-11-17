@@ -26,7 +26,9 @@ public:
 	void backpropagation();
     void verify(const std::string& phrase);
 	void getGrad();
+    void getDeltaVth();
 	void updateWeight();
+    void updateVth();
 	void clearMomentum();
 	void calCost();
     void loadRef();
@@ -87,6 +89,15 @@ public:
         */
 	}
 
+    virtual void printFireCount(){
+        char logStr[1024];
+		sprintf(logStr, "%s:\n",m_name.c_str());
+		LOG(logStr, "Result/log.txt");
+		fireCount->toCpu();
+		sprintf(logStr, "fire count: %d, %d, %d, %d, %d, %d, %d, %d, %d, %d;\n", fireCount->get(0,0,0), fireCount->get(0,1,0), fireCount->get(0,2,0), fireCount->get(0,3,0), fireCount->get(0,4,0), fireCount->get(0,5,0), fireCount->get(0,6,0), fireCount->get(0,7,0), fireCount->get(0,8,0), fireCount->get(0,9,0));
+		LOG(logStr, "Result/log.txt");
+    }
+
 private:
 	cuMatrix<bool>*   inputs;
 	cuMatrix<float>*  preDelta;
@@ -100,9 +111,12 @@ private:
     cuMatrix<float>* groundTruth;
     cuMatrix<int>*   preFireCount;
 
+    cuMatrix<float>* vth;
+    cuMatrix<float>* vthDelta;
+    cuMatrix<float>* vthDeltaTmp;
+
     int * predict;
 	int batch;
-	float vth;
     int T_REFRAC;
     float TAU_M;
     float TAU_S;

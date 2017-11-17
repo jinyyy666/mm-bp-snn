@@ -20,7 +20,9 @@ public:
 	void backpropagation(){};
     void verify(const std::string& phrase){};
 	void getGrad(){};
+    void getDeltaVth(){};
 	void updateWeight(){};
+    void updateVth(){};
 	void clearMomentum(){};
 
 	void calCost(){};
@@ -55,6 +57,7 @@ public:
 	void testData();
 
 	void printParameter(){};
+    void printFireCount(){};
 	void synchronize();
 
 	void getBatchSpikesWithStreams(cuMatrixVector<bool>& inputs, int start);

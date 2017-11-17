@@ -11,3 +11,4 @@ nmnist_*/
 A*
 Makefile
 *.nvvp
+weights/

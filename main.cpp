@@ -26,6 +26,7 @@
 #include "layers/Pooling.h"
 
 //#define VERIFY
+//#define VERIFY_DYNAMICVTH
 
 void runMnist();
 void runCifar10();
@@ -380,8 +381,10 @@ void runNMnist(){
     
     //* initialize the configuration
 	Config * config = Config::instance();
-#ifdef VERIFY
+#if   defined(VERIFY)
     config->initPath("Config/NMnistConfig_test.txt");
+#elif defined(VERIFY_DYNAMICVTH)
+    config->initPath("Config/NMnistConfig_test_dynamicvth.txt");
 #else
     config->initPath("Config/NMnistConfig.txt");
 #endif
@@ -427,11 +430,11 @@ void runNMnist(){
 #ifdef VERIFY
 	nlrate.push_back(0.00001f);   nMomentum.push_back(0.00f);  epoCount.push_back(1);
 #else
-	nlrate.push_back(0.00001f);   nMomentum.push_back(0.90f);  epoCount.push_back(10);
-    nlrate.push_back(0.000009f);   nMomentum.push_back(0.90f);  epoCount.push_back(10);
-	nlrate.push_back(0.000008f);   nMomentum.push_back(0.90f);  epoCount.push_back(10);
-	nlrate.push_back(0.000007f);   nMomentum.push_back(0.90f);  epoCount.push_back(10);
-	nlrate.push_back(0.000006f);   nMomentum.push_back(0.90f);  epoCount.push_back(10);
+	nlrate.push_back(0.00001f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
+    nlrate.push_back(0.000009f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
+	nlrate.push_back(0.000008f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
+	nlrate.push_back(0.000007f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
+	nlrate.push_back(0.000006f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
 #endif
 
 	start = clock();
@@ -459,8 +462,10 @@ void runSpeech(){
     
     //* initialize the configuration
 	Config * config = Config::instance();
-#ifdef VERIFY
+#if   defined(VERIFY)
     config->initPath("Config/SpokenLetterConfig_test.txt");
+#elif defined(VERIFY_DYNAMICVTH)
+    config->initPath("Config/SpokenLetterConfig_test_dynamicvth.txt");
 #else
     config->initPath("Config/SpokenLetterConfig.txt");
 #endif
