@@ -92,9 +92,11 @@ __global__ void g_dataLayer_get_fireCount(
     for(int i = 0; i < outputDim; i += blockDim.x)
     {
         int o_idx = i + threadIdx.x;
-        int sum = 0;
-        for(int time = 0; time < endTime; ++time)   sum += output[o_idx + time * outputDim];
-        fireCount[o_idx] = sum;
+        if(o_idx < outputDim){
+            int sum = 0;
+            for(int time = 0; time < endTime; ++time)   sum += output[o_idx + time * outputDim];
+            fireCount[o_idx] = sum;
+        }
     }
 }
 

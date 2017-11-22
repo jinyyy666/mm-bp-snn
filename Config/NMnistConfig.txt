@@ -7,7 +7,7 @@ TEST_EPOCH = 100;                 #the period to get the test dataset's error ra
 WHITE_NOISE = 0.0;  
 
 
-BATCH_SIZE = 128;
+BATCH_SIZE = 1;
 CHANNELS = 1;                   #1, 3, 4#
 END_TIME = 480;                 #The spike train duration#
 
@@ -29,7 +29,7 @@ LAYER = SPIKING;
 NAME  = hidden_0;
 NUM_NEURONS = 800;
 INPUT = data;
-WEIGHT_DECAY = 0.0;
+WEIGHT_DECAY = 1e-6;
 VTH = 15;
 T_REFRAC = 2;
 TAU_M = 64;
@@ -39,6 +39,8 @@ initType = Bernoulli;
 DESIRED_LEVEL = 45;
 UNDESIRED_LEVEL = 15;
 MARGIN = 5;
+ADD_BIAS = true;                 # add bias spiking neuron in the hidden layer #
+BIAS_FREQ = 20;
 ]
 
 [
@@ -47,7 +49,7 @@ NUM_CLASSES = 10;
 NUM_NEURONS = 10;
 NAME  = output;
 INPUT = hidden_0;
-WEIGHT_DECAY = 0.0;
+WEIGHT_DECAY = 1e-6;
 VTH = 5;
 T_REFRAC = 2;
 TAU_M = 64;
@@ -57,4 +59,6 @@ initType = Bernoulli;
 DESIRED_LEVEL = 45;
 UNDESIRED_LEVEL = 15;
 MARGIN = 5;
+ADD_BIAS = true;                 # add bias spiking neuron in the hidden layer #
+BIAS_FREQ = 20;
 ]

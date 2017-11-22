@@ -505,7 +505,7 @@ public:
         float initW, int weight_connect, std::string initType, std::string weight_path,
         std::string lweight_path, std::string laterial_type, std::string r_dim, 
         float local_inb_strength, float undesired_level, float desired_level, float margin, 
-        std::map<std::string, std::string> ref_paths)
+        std::map<std::string, std::string> ref_paths, bool has_bias, int dummy_freq)
     {
         m_name = name;
         m_type = type;
@@ -532,6 +532,8 @@ public:
         m_ref_lweight_path = ref_paths[std::string("refLWeightPath")];
         m_ref_output_train_path = ref_paths[std::string("refOutputTrainPath")];
         m_ref_output_test_path = ref_paths[std::string("refOutputTestPath")];
+        m_hasBias = has_bias;
+        m_dummyFreq = dummy_freq;
 	}
     bool hasLaterialWeight(){return m_laterialType != std::string("NULL");}
     std::vector<int> parseDim(std::string s){
@@ -546,6 +548,8 @@ public:
         dim.push_back(atoi(s.c_str()));
         return dim;
     }
+    bool hasBias(){return m_hasBias;}
+    int getBiasFreq(){return m_dummyFreq;}
     int m_numNeurons;
     int m_classes;
 	float m_weightDecay;
@@ -566,6 +570,8 @@ public:
     std::string m_ref_lweight_path;
     std::string m_ref_output_train_path;
     std::string m_ref_output_test_path;
+    bool m_hasBias;
+    int m_dummyFreq;
 };
 
 class ConfigHorizontal

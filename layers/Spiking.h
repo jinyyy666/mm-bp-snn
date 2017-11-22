@@ -38,6 +38,7 @@ public:
     void initLaterial();
     void initLocalInhibition(float strength);
 	void initFromCheckpoint(FILE* file);
+    void initBiasFromDumpfile(const std::string& filename, cuMatrixVector<float>& cuW);
     void initFromDumpfile(const std::string& filename, cuMatrixVector<float>& cuW);
 	void save(FILE* file);
 
@@ -82,11 +83,11 @@ public:
 		w[0]->toCpu();
 		sprintf(logStr, "weight:%f, %f, %f;\n", w[0]->get(0,0,0), w[0]->get(0,1,0), w[0]->get(0, 2, 0));
 		LOG(logStr, "Result/log.txt");
-        /*
+        
 		b[0]->toCpu();
 		sprintf(logStr, "bias  :%f\n", b[0]->get(0,0,0));
 		LOG(logStr, "Result/log.txt");
-        */
+        
 	}
 
     virtual void printFireCount(){
@@ -131,11 +132,13 @@ private:
     cuMatrixVector<float> w_laterial;
 	cuMatrixVector<float> b;
 	cuMatrixVector<float> bgrad;
+    cuMatrixVector<float> bgradTmp;
 	cuMatrixVector<float> momentum_w;
 	cuMatrixVector<float> momentum_b;
 
     cuMatrixVector<float> w_ref;
     cuMatrixVector<float> w_laterial_ref;
+    cuMatrixVector<float> b_ref;
     cuMatrixVector<bool>   output_train_ref;
     cuMatrixVector<bool>   output_test_ref;
 };

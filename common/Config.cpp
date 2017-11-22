@@ -421,12 +421,14 @@ void Config:: get_layers_config(string &str){
             ref_paths[std::string("refLWeightPath")] = get_word_type(layers[i], "refLWeightPath");
             ref_paths[std::string("refOutputTrainPath")] = get_word_type(layers[i], "refOutputTrainPath");
             ref_paths[std::string("refOutputTestPath")] = get_word_type(layers[i], "refOutputTestPath");
-
+            bool has_bias = get_word_bool(layers[i], "ADD_BIAS");
+            string df = get_word_type(layers[i], "BIAS_FREQ");
+            int dummy_freq = df == string("NULL") ? 100000 : atoi(df.c_str());
             layer = new ConfigSpiking(name, type, input, num_classes, num_neurons, wd, 
                          vth, t_ref, tau_m, tau_s, 
                          initW, weight_connect, initType, weight_path,
                          lweight_path, laterial_type, reservoir_dim, local_inb_strength,
-                         undesired_level, desired_level, margin, ref_paths);
+                         undesired_level, desired_level, margin, ref_paths, has_bias, dummy_freq);
             m_classes = num_classes;
             char logStr[256];
             sprintf(logStr, "\n\n********Spiking Layer********\n");LOG(logStr, "Result/log.txt");
@@ -452,6 +454,8 @@ void Config:: get_layers_config(string &str){
             sprintf(logStr, "refLWeightPath          : %s\n", ref_paths[std::string("refLWeightPath")].c_str());LOG(logStr, "Result/log.txt");
             sprintf(logStr, "refOuputTrainPath       : %s\n", ref_paths[std::string("refOutputTrainPath")].c_str());LOG(logStr, "Result/log.txt");
             sprintf(logStr, "refOutputTestPath       : %s\n", ref_paths[std::string("refOutputTestPath")].c_str());LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "ADD_BIAS                : %d\n", has_bias);LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "BIAS_FREQ               : %d\n", dummy_freq);LOG(logStr, "Result/log.txt");
         }
 
         insertLayerByName(name, layer);

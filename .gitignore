@@ -12,3 +12,4 @@ A*
 Makefile
 *.nvvp
 weights/
+Config/NMnistConfig_small.txt

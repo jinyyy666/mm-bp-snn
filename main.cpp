@@ -382,7 +382,7 @@ void runNMnist(){
     //* initialize the configuration
 	Config * config = Config::instance();
 #if   defined(VERIFY)
-    config->initPath("Config/NMnistConfig_test.txt");
+    config->initPath("Config/NMnistConfig_test_bias.txt");
 #elif defined(VERIFY_DYNAMICVTH)
     config->initPath("Config/NMnistConfig_test_dynamicvth.txt");
 #else
@@ -405,7 +405,7 @@ void runNMnist(){
 
  	int batch = Config::instance()->getBatchSize();
 	float start,end;
-    /*
+    
 	int cmd;
 	printf("1. random init weight\n2. Read weight from the checkpoint\nChoose the way to init weight:");
 
@@ -415,13 +415,13 @@ void runNMnist(){
 		if(1 != scanf("%d", &cmd)){
             LOG("scanf fail", "result/log.txt");
         }
-    */
+    
 	buildSpikingNetwork(trainX.size(), testX.size());
 
-    /*
+    
 	if(cmd == 2)
 		cuReadSpikingNet("Result/checkPoint.txt");
-    */
+    
 
 	//* learning rate
 	std::vector<float> nlrate;
