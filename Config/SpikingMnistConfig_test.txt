@@ -1,0 +1,61 @@
+#Comment#
+#NON_LINEARITY = NL_SIGMOID , NL_TANH , NL_RELU#
+IS_GRADIENT_CHECKING = true;   #is true when debug#
+SHOWIMAGE = false;              #show the images after transformation#
+TEST_EPOCH = 1;                 #the period to get the test dataset's error rate#
+WHITE_NOISE = 0.0;  
+
+
+BATCH_SIZE = 1;                
+CHANNELS = 1;                   #1, 3, 4#
+END_TIME = 400;                 #The spike train duration#
+
+
+TRAIN_SAMPLES = 1;              # number of train/test samples#
+TEST_SAMPLES = 1;
+TRAIN_DATA_PATH = test/mnist/input_spikes_0_5.dat;  # train and test path for the speech samples #
+TEST_DATA_PATH =  test/mnist/input_spikes_0_5.dat;    
+
+[
+LAYER = DATASPIKING;
+NAME  = data;
+NUM_NEURONS = 784;
+]
+
+[
+LAYER = SPIKING;
+NAME  = hidden_0;
+NUM_NEURONS = 400;
+INPUT = data;
+WEIGHT_DECAY = 0.0;
+VTH = 15;
+T_REFRAC = 2;
+TAU_M = 64;
+TAU_S = 8;
+initType = External;
+weightPath = test/golden/mnist/weights/h_weights_info.txt;
+refOutputTrainPath = test/golden/mnist/spikes/Hidden_Response_Supv/train/5/hidden_0_spikes_0_5.dat;
+refOutputTestPath = test/golden/mnist/spikes/Hidden_Response_Supv/test/5/hidden_0_spikes_0_5.dat;
+refWeightPath = test/golden/mnist/weights/h_weights_info_trained.txt;
+]
+
+[
+LAYER = SPIKING;
+NUM_CLASSES = 10;
+NAME  = output;
+NUM_NEURONS = 10;
+INPUT = hidden_0;
+WEIGHT_DECAY = 0.0;
+VTH = 5;
+T_REFRAC = 2;
+TAU_M = 64;
+TAU_S = 8;
+initType = External;
+weightPath = test/golden/mnist/weights/o_weights_info.txt;
+DESIRED_LEVEL = 45;
+UNDESIRED_LEVEL = 15;
+MARGIN = 5;
+refOutputTrainPath = test/golden/mnist/spikes/Readout_Response_Supv/train/5/readout_spikes_0_5.dat;
+refOutputTestPath = test/golden/mnist/spikes/Readout_Response_Supv/test/5/readout_spikes_0_5.dat;
+refWeightPath = test/golden/mnist/weights/o_weights_info_trained.txt;
+]

@@ -183,6 +183,30 @@ void read_each_speech_dump(const std::string& filename, cuMatrixVector<bool>& x,
     x.push_back(tpmat);
 }
 
+//* read the dumped input of CPU as a spike time matrix
+void read_dumped_input_inside(const std::string& filename, cuMatrixVector<bool>& x, int nrows, int ncols)
+{
+    std::ifstream f_in(filename.c_str());
+    if(!f_in.is_open()){
+        std::cout<<"Cannot open the file: "<<filename<<std::endl;
+        exit(EXIT_FAILURE);
+    }
+    vector<vector<int> > * sp_time = new vector<vector<int> >(ncols, vector<int>()); 
+    int index, spike_time;
+    f_in>>index>>spike_time; // get rid of -1   -1 at the beginning
+    while(f_in>>index>>spike_time){
+        if(index == -1 && spike_time == -1) break; // only read one iteration of speech
+        assert(index < ncols);
+        if(spike_time >= nrows) continue;
+        assert(spike_time > ((*sp_time)[index].empty() ? -1 : (*sp_time)[index].back()));
+
+        (*sp_time)[index].push_back(spike_time);
+    }   
+    f_in.close();
+    cuMatrix<bool>* tpmat = new cuMatrix<bool>(nrows, ncols, 1, sp_time);
+    tpmat->freeCudaMem();
+    x.push_back(tpmat);
+}
 
 //* read the label
 int readSpeechLabel(const std::vector<int>& labels, cuMatrix<int>* &mat){

@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <math.h>
 
+//#define DEBUG
 
 /*
  * Device func for accumulate the spike response
@@ -1622,6 +1623,16 @@ __global__ void g_Spiking_wgrad_spiketime(
         {
             float delta_w = d_Spiking_gradient_spiketime(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], cDelta[o_idx], o_idx, i_idx, outputDim, inputDim, endTime, T_REFRAC, TAU_M, TAU_S);
             wgrad[i_idx + o_idx * inputDim] = delta_w;
+#ifdef DEBUG
+            if(i_idx == 157 && o_idx == 0){
+                printf("157 fires: ");
+                for(int i = 0; i < input_fireCount[i_idx]; i++)    printf("%d\t", input_time[i_idx * endTime + i]);
+                printf("\n");
+                printf("0 fires: ");
+                for(int j = 0; j < output_fireCount[o_idx]; j++)    printf("%d\t", output_time[o_idx * endTime + j]);
+                printf("\n");
+            }
+#endif
         }
     }
 

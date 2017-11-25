@@ -1,0 +1,60 @@
+#Comment#
+#NON_LINEARITY = NL_SIGMOID , NL_TANH , NL_RELU#
+IS_GRADIENT_CHECKING = false;   #is true when debug#
+SHOWIMAGE = false;              #show the images after transformation#
+TEST_EPOCH = 1;                 #the period to get the test dataset's error rate#
+WHITE_NOISE = 0.0;  
+
+
+BATCH_SIZE = 1;                
+CHANNELS = 1;                   #1, 3, 4#
+END_TIME = 400;                 #The spike train duration#
+
+
+TRAIN_SAMPLES = 60000;              # number of train/test samples#
+TEST_SAMPLES = 10000;
+
+[
+LAYER = DATASPIKING;
+NAME  = data;
+NUM_NEURONS = 784;
+]
+
+[
+LAYER = SPIKING;
+NAME  = hidden_0;
+NUM_NEURONS = 800;
+INPUT = data;
+WEIGHT_DECAY = 0.0;
+VTH = 15;
+T_REFRAC = 2;
+TAU_M = 64;
+TAU_S = 8;
+initW = 0.3;
+initType = Bernoulli;
+DESIRED_LEVEL = 45;
+UNDESIRED_LEVEL = 15;
+MARGIN = 5;
+ADD_BIAS = true;
+BIAS_FREQ = 20;
+]
+
+[
+LAYER = SPIKING;
+NUM_CLASSES = 10;
+NAME  = output;
+NUM_NEURONS = 10;
+INPUT = hidden_0;
+WEIGHT_DECAY = 0.0;
+VTH = 5;
+T_REFRAC = 2;
+TAU_M = 64;
+TAU_S = 8;
+initW = 0.2;
+initType = Bernoulli;
+DESIRED_LEVEL = 45;
+UNDESIRED_LEVEL = 15;
+MARGIN = 5;
+ADD_BIAS = true;
+BIAS_FREQ = 20;
+]

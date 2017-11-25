@@ -17,4 +17,13 @@ int readMnistData(cuMatrixVector<float> &x,
 	int number_of_images,
 	int flag);
 
+/*read the MNIST and produce the poisson spike trains*/
+int readSpikingMnistData(
+        cuMatrixVector<bool>& x,
+        cuMatrix<int>*& y, 
+        std::string xpath,
+        std::string ypath,
+        int number_of_images,
+        int input_neurons,
+        int end_time);
 #endif

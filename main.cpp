@@ -33,6 +33,7 @@ void runCifar10();
 void runCifar100();
 void runChinese();
 void runNMnist();
+void runSpikingMnist();
 void runSpeech();
 void cuVoteMnist();
 bool init(cublasHandle_t& handle);
@@ -51,7 +52,7 @@ int main (int argc, char** argv)
 		g_argv.push_back(atoi(argv[1]));
 		g_argv.push_back(atoi(argv[2]));
 	}
-	printf("1. MNIST\n2. CIFAR-10\n3. CHINESE\n4. CIFAR-100\n5. VOTE MNIST\n6. NMnist\n7. Spoken English Letter\nChoose the dataSet to run:");
+	printf("1. MNIST\n2. CIFAR-10\n3. CHINESE\n4. CIFAR-100\n5. VOTE MNIST\n6. NMnist\n7. Spiking Mnist\n8. Spoken English Letter\nChoose the dataSet to run:");
 	int cmd;
 	if(g_argv.size() >= 2)
 		cmd = g_argv[0];
@@ -72,6 +73,8 @@ int main (int argc, char** argv)
     else if(cmd == 6)
         runNMnist();
     else if(cmd == 7)
+        runSpikingMnist();
+    else if(cmd == 8)
         runSpeech();
 	return EXIT_SUCCESS;
 }
@@ -446,6 +449,96 @@ void runNMnist(){
 		(end - start) / CLOCKS_PER_SEC / 3600);
 	LOG(logStr, "Result/log.txt");
 }
+
+
+void runSpikingMnist(){
+	const int nclasses = 10;
+
+ 	//*state and cublas handle
+ 	cublasHandle_t handle;
+	init(handle);
+	
+ 	//* read the data from disk
+	cuMatrixVector<bool> trainX;
+	cuMatrixVector<bool> testX;
+ 	cuMatrix<int>* trainY, *testY;
+    
+    //* initialize the configuration
+	Config * config = Config::instance();
+#if   defined(VERIFY)
+    config->initPath("Config/SpikingMnistConfig_test.txt");
+#else
+    config->initPath("Config/SpikingMnistConfig.txt");
+#endif
+
+    ConfigDataSpiking * ds_config = (ConfigDataSpiking*)config->getLayerByName("data");
+    int input_neurons = ds_config->m_inputNeurons;
+    int end_time = config->getEndTime();
+    int train_samples = config->getTrainSamples();
+    int test_samples = config->getTestSamples();
+#if defined(VERIFY)
+    read_dumped_input_inside(config->getTrainPath(), trainX, end_time, input_neurons);
+    std::vector<int> my_label(1, 5);
+    trainY = new cuMatrix<int>(1, 1, 1);
+    readSpeechLabel(my_label, trainY);
+    read_dumped_input_inside(config->getTestPath(), testX, end_time, input_neurons);
+    testY = new cuMatrix<int>(1, 1, 1);
+    readSpeechLabel(my_label, testY);
+#else
+ 	readSpikingMnistData(trainX, trainY, "mnist/train-images-idx3-ubyte", "mnist/train-labels-idx1-ubyte", train_samples, input_neurons, end_time);
+ 	readSpikingMnistData(testX , testY, "mnist/train-images-idx3-ubyte", "mnist/train-labels-idx1-ubyte",  test_samples, input_neurons, end_time);
+#endif
+	MemoryMonitor::instance()->printCpuMemory();
+	MemoryMonitor::instance()->printGpuMemory();
+
+ 	//* build SNN net 
+ 	int nsamples = trainX.size();
+
+ 	int batch = Config::instance()->getBatchSize();
+	float start,end;
+    
+	int cmd;
+    /*
+	printf("1. random init weight\n2. Read weight from the checkpoint\nChoose the way to init weight:");
+
+	if(g_argv.size() >= 2)
+		cmd = g_argv[1];
+	else 
+		if(1 != scanf("%d", &cmd)){
+            LOG("scanf fail", "result/log.txt");
+        }
+    */
+	buildSpikingNetwork(trainX.size(), testX.size());
+
+    /*
+	if(cmd == 2)
+		cuReadSpikingNet("Result/checkPoint.txt");
+    */
+
+	//* learning rate
+	std::vector<float> nlrate;
+	std::vector<float> nMomentum;
+	std::vector<int> epoCount;
+#ifdef VERIFY
+	nlrate.push_back(0.00001f);   nMomentum.push_back(0.00f);  epoCount.push_back(1);
+#else
+	nlrate.push_back(0.00001f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
+    nlrate.push_back(0.000009f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
+	nlrate.push_back(0.000008f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
+	nlrate.push_back(0.000007f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
+	nlrate.push_back(0.000006f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
+#endif
+
+	start = clock();
+	cuTrainSpikingNetwork(trainX, trainY, testX, testY, batch, nclasses, nlrate, nMomentum, epoCount, handle);
+	end = clock();
+
+	char logStr[1024];
+	sprintf(logStr, "trainning time hours = %f\n", 
+		(end - start) / CLOCKS_PER_SEC / 3600);
+	LOG(logStr, "Result/log.txt");
+}
+
 
 
 void runSpeech(){

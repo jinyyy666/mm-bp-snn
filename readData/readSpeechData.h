@@ -14,6 +14,9 @@ void read_each_speech(const std::string& filename, cuMatrixVector<bool>& x, int 
 //* read each speech from the dump file
 void read_each_speech_dump(const std::string& filename, cuMatrixVector<bool>& x, int nrows, int ncols);
 
+//* read the dumped input of CPU as a spike time matrix
+void read_dumped_input_inside(const std::string& filename, cuMatrixVector<bool>& x, int nrows, int ncols);
+
 //* read training data and lables
 int readSpeechData(cuMatrixVector<bool> &x,
 	cuMatrix<int>* &y, 
