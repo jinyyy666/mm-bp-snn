@@ -2,7 +2,7 @@
 #NON_LINEARITY = NL_SIGMOID , NL_TANH , NL_RELU#
 IS_GRADIENT_CHECKING = false;   #is true when debug#
 SHOWIMAGE = false;              #show the images after transformation#
-TEST_EPOCH = 1;                 #the period to get the test dataset's error rate#
+TEST_EPOCH = 5;                 #the period to get the test dataset's error rate#
 WHITE_NOISE = 0.0;  
 
 
@@ -35,8 +35,6 @@ initType = Bernoulli;
 DESIRED_LEVEL = 45;
 UNDESIRED_LEVEL = 15;
 MARGIN = 5;
-ADD_BIAS = true;
-BIAS_FREQ = 20;
 ]
 
 [
@@ -55,6 +53,4 @@ initType = Bernoulli;
 DESIRED_LEVEL = 45;
 UNDESIRED_LEVEL = 15;
 MARGIN = 5;
-ADD_BIAS = true;
-BIAS_FREQ = 20;
 ]
