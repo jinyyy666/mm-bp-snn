@@ -105,10 +105,21 @@ int read_Mnist_Label(std::string filename,
 	int flag){
 		std::ifstream file(filename.c_str(), std::ios::binary);
 		if (file.is_open()){
+            int magic_number = 0;
 			int number_of_images = 0;
 			int n_rows = 0;
 			int n_cols = 0;
-            readFileInform(file, number_of_images, n_rows, n_cols, num);
+            file.read((char*) &magic_number, sizeof(magic_number));
+            magic_number = ReverseInt(magic_number);
+            file.read((char*) &number_of_images,sizeof(number_of_images));
+            number_of_images = ReverseInt(number_of_images);
+            if(number_of_images >= num){
+                number_of_images = num;
+            }
+            else{
+                printf("readFileInform::number of images is overflow\n");
+                exit(0);
+            }
 
 			int id = 0;
 			for(int i = 0; i < number_of_images; ++i){
@@ -133,7 +144,6 @@ int read_Mnist_Label(std::string filename,
 
 			if(!flag) return id;
 			else return number_of_images;
-			return id;
 		}
 		return 0;
 }
