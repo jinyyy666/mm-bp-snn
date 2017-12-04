@@ -1,0 +1,50 @@
+#Comment#
+#NON_LINEARITY = NL_SIGMOID , NL_TANH , NL_RELU#
+IS_GRADIENT_CHECKING = false;   #is true when debug#
+DYNAMIC_THRESHOLD = false;       # allow dynamic threshold#
+SHOWIMAGE = false;              #show the images after transformation#
+TEST_EPOCH = 100;                 #the period to get the test dataset's error rate#
+WHITE_NOISE = 0.0;  
+
+
+BATCH_SIZE = 128;
+CHANNELS = 1;                   #1, 3, 4#
+END_TIME = 480;                 #The spike train duration#
+
+
+TRAIN_SAMPLES = 60000;              # number of train/test samples#
+TEST_SAMPLES = 10000;
+TRAIN_DATA_PATH = nmnist_400/train;  # train and test path for the speech samples #
+TEST_DATA_PATH =  nmnist_400/test;    
+
+[
+LAYER = DATASPIKING;
+NAME  = data;
+NUM_NEURONS = 1156;
+]
+
+
+[
+LAYER = SPIKING;
+NAME  = hidden_0;
+NUM_NEURONS = 800;
+INPUT = data;
+WEIGHT_DECAY = 1e-6;
+VTH = 5;
+T_REFRAC = 2;
+TAU_M = 64;
+TAU_S = 8;
+initW = 0.1;
+initType = Bernoulli;
+]
+
+
+[
+LAYER = SOFTMAXSPIKING;
+NAME = softmax;
+INPUT = hidden_0;
+NUM_CLASSES = 10;
+WEIGHT_DECAY = 1e-6;
+initW = 0.1;
+initType = Bernoulli;           #Gaussian, Bernoulli#
+]

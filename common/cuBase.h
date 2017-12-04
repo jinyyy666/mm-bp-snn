@@ -57,6 +57,21 @@ threads : <<<dim3(batch), dim3(min(outputDim, 1024))>>>
 */
 __global__ void g_response_2_spiketime(bool* outputs, int* outputs_time, int ouputDim, int endTime);
 
+/*
+function: normalize the fire counts by the max count for SNN
+threads : <<<dim3(batch), dim3(min(1024, inputDim))>>>
+*/
+__global__ void g_normalize_fireCount(int * inputs, float * inputs_float, int rows, int cols);
+
+/*
+function: compute the softmax prob of the softmax layer
+threads : <<<dim3(batch), dim3(min(512, outputDim))>>>
+*/
+__global__ void g_getSoftMaxP(float* softMaxP, float* b, int cols);
+
+__global__ void g_getSoftMaxDelta(float* softMaxDelta, float* softMaxP, float* groundTruth, int len);
+
+__global__ void g_getSmrWgrad(float* wgrad, float* weight, float lambda, int len, int batch);
 #endif
 
 

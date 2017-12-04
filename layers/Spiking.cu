@@ -109,9 +109,9 @@ __global__ void g_getDelta_output(
 
 /*
  * dim3 block = dim3(batch);
- * dim3 thread= dim3(outputDim);
+ * dim3 thread= dim3(min(1024, outputDim));
  */
-__global__ void g_getMaxCount_output(
+__global__ void g_getMaxCount(
     int* fireCount,
     int* maxCount,
     int cols); 
@@ -301,6 +301,12 @@ void Spiking::feedforward()
 
 void Spiking::backpropagation()
 {
+    // reduce to get the max fire count for each sample in the batch
+    int threads = min(1024, outputDim);
+    g_getMaxCount<<<dim3(batch), dim3(threads), sizeof(int) * threads>>>(fireCount->getDev(), maxCount->getDev(), fireCount->cols);  
+    cudaStreamSynchronize(0);
+    getLastCudaError("Spiking::g_getMaxCount");
+
     if(m_name == std::string("output")){
         // compute the cost function
         g_getCost_output<<<dim3(1), dim3(256), sizeof(float) * 256>>>(fireCount->getDev(), groundTruth->getDev(), cost->getDev(), predict, batch, fireCount->cols, UNDESIRED_LEVEL, DESIRED_LEVEL, MARGIN);
@@ -311,11 +317,6 @@ void Spiking::backpropagation()
         g_getDelta_output<<<dim3(1), dim3(256)>>>(curDelta->getDev(), fireCount->getDev(), groundTruth->getDev(), curDelta->getLen(), MARGIN);
         cudaStreamSynchronize(0);
         getLastCudaError("Spiking::g_getDelta_output");
-
-        // reduce to get the max fire count for each sample in the batch
-        g_getMaxCount_output<<<dim3(batch), dim3(outputDim), sizeof(int) * outputDim>>>(fireCount->getDev(), maxCount->getDev(), fireCount->cols);  
-        cudaStreamSynchronize(0);
-        getLastCudaError("Spiking::g_getMaxCount_output");
 
         // modify the output spikes of the target neuron if it does not fire
         // tricky: modify both the spike trains and output fire counts!
@@ -678,16 +679,16 @@ Spiking::Spiking(std::string name)
 
 	curDelta = new cuMatrix<float>(batch, outputDim, outputAmount);
     fireCount= new cuMatrix<int>(batch, outputDim, outputAmount);
+    maxCount    = new cuMatrix<int>(batch, 1, 1);
+
     // only for the output
     if(config->m_name == std::string("output")){
         groundTruth = new cuMatrix<float>(batch, outputDim, 1);
         cost        = new cuMatrix<float>(1, 1, 1);
-        maxCount    = new cuMatrix<int>(batch, 1, 1);
     }
     else{
         groundTruth = NULL;
         cost        = NULL;
-        maxCount    = NULL;
     }
     assert(outputDim > 0 && inputDim > 0);
 
@@ -1403,17 +1404,27 @@ __global__ void g_getDelta_output(float* outputDelta, int* fireCount, float* gro
  * dim3 block = dim3(batch);
  * dim3 thread= dim3(outputDim);
  */
-__global__ void g_getMaxCount_output(int* fireCount, int* maxCount, int cols)
+__global__ void g_getMaxCount(int* fireCount, int* maxCount, int cols)
 {
     extern __shared__ int _max[];
     int batchId = blockIdx.x;
     int len = blockDim.x;
     int id = threadIdx.x;
+    
+    _max[id] = 0;
+    __syncthreads();
+    
+    for(int tid = 0; tid < cols; tid += blockDim.x){
+        int ttid = tid + id;
+        if(ttid < cols){
+            _max[threadIdx.x] = max(_max[threadIdx.x], fireCount[ttid + batchId * cols]);
+        }
+    }
 
     _max[id] = fireCount[id + batchId * cols];
-    __syncthreads();
     while(len != 1)
-    {
+    { 
+        __syncthreads();
         int skip = (len + 1)>>1;
         if(id < skip && (id + skip) < len)
         {
@@ -1614,6 +1625,7 @@ __global__ void g_Spiking_wgrad_spiketime(
     int* output_time      = outputs_time + batchId * outputSize2;
     int* input_fireCount   = batchPreFireCount + batchId * outputDim;
     int* output_fireCount = batchFireCount + batchId * outputDim;
+
     float* cDelta = curDelta + batchId * curDeltaSize;
     
     for(int i = 0; i < outputDim; i += blockDim.x)

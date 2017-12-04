@@ -12,6 +12,7 @@
 #include "layers/LayerBase.h"
 #include "layers/DataLayerSpiking.h"
 #include "layers/Spiking.h"
+#include "layers/SoftMaxSpiking.h"
 #include <queue>
 #include <set>
 
@@ -73,6 +74,9 @@ void buildSpikingNetwork(int trainLen, int testLen)
         else if(top->m_type == std::string("SPIKING")){
             new Spiking(top->m_name);
         }
+        else if(top->m_type == std::string("SOFTMAXSPIKING")){
+            new SoftMaxSpiking(top->m_name);
+        }
 
         sprintf(logStr, "layer %15s:", top->m_name.c_str());
         LOG(logStr, "Result/log.txt");
@@ -110,8 +114,8 @@ void getSpikingNetworkCost(int* y)
 {
     /*feedforward*/
     for(int i = 0; i < (int)spiking_que.size(); i++){
-        if(spiking_que[i]->m_name == std::string("output")){
-            Spiking* output = (Spiking*)Layers::instance()->get(spiking_que[i]->m_name);
+        if(spiking_que[i]->m_name == std::string("output") || spiking_que[i]->m_type == std::string("SOFTMAXSPIKING")){
+            SpikingLayerBase* output = (SpikingLayerBase*)Layers::instance()->get(spiking_que[i]->m_name);
             output->setPredict(y);
         }
     }
@@ -168,7 +172,34 @@ __global__ void g_getPredict(int* batchfireCount, int cols,  int* vote)
     votep[r]++;
 }
 
-void resultPredict(int* vote)
+/*
+* Get the predict based on softmax
+* dim3(1),dim3(batch)
+*/
+__global__ void g_getPredict_softmax(float* softMaxP, int cols,  int start, int* vote)
+{
+	int id = threadIdx.x;
+	if(id < start) return;
+	float* p = softMaxP + id * cols;
+	int* votep= vote     + id * cols;
+
+	int r = 0;
+	float maxele = log(p[0]);
+	for(int i = 1; i < cols; i++)
+	{
+		float val = log(p[i]);
+		if(maxele < val)
+		{
+			maxele = val;
+			r = i;
+		}
+	}
+	votep[r]++;
+}
+
+
+
+void resultPredict(int* vote, int start)
 {
     /*feedforward*/
     for(int i = 0; i < (int)spiking_que.size(); i++){
@@ -185,6 +216,15 @@ void resultPredict(int* vote)
             cudaStreamSynchronize(0);
             getLastCudaError("g_getPredict");
         }
+        if(spiking_que[i]->m_type == std::string("SOFTMAXSPIKING")){
+			g_getPredict_softmax<<<dim3(1), Config::instance()->getBatchSize()>>>(
+				Layers::instance()->get(spiking_que[i]->m_name)->getOutputs()->getDev(),
+				Layers::instance()->get(spiking_que[i]->m_name)->getOutputs()->cols,
+				start,
+				vote);
+			cudaStreamSynchronize(0);
+            getLastCudaError("g_getPredict_softmax");
+		}
     }
 }
 
@@ -249,7 +289,7 @@ void predictTestRate(cuMatrixVector<bool>&x,
     for (int k = 0; k < ((int)testX.size() + batch - 1) / batch; k ++) {
         dl->synchronize();
         int start = k * batch;
-        printf("train %2d%%", 100 * start / (((int)testX.size() + batch - 1)));
+        printf("test %2d%%", 100 * start / (((int)testX.size() + batch - 1)));
 
         if(start + batch <= (int)testX.size() - batch)
             dl->getBatchSpikesWithStreams(testX, start + batch);
@@ -259,7 +299,7 @@ void predictTestRate(cuMatrixVector<bool>&x,
         }
 
         dl->testData();
-        resultPredict(cuSVote->getDev() + start * nclasses);
+        resultPredict(cuSVote->getDev() + start * nclasses, k * batch - start);
         printf("\b\b\b\b\b\b\b\b\b");
     }
 
@@ -283,11 +323,12 @@ void predictTestRate(cuMatrixVector<bool>&x,
 float getSpikingCost(){
     float cost = 0.0;
     for(int i = 0; i < (int)spiking_que.size(); i++){
-        if(spiking_que[i]->m_name != "output")  continue;
-        LayerBase* layer = (LayerBase*)Layers::instance()->get(spiking_que[i]->m_name);
-        layer->calCost();
-        layer->printCost();
-        cost += layer->getCost();
+        if(spiking_que[i]->m_name == "output" || spiking_que[i]->m_type == std::string("SOFTMAXSPIKING")){
+            LayerBase* layer = (LayerBase*)Layers::instance()->get(spiking_que[i]->m_name);
+            layer->calCost();
+            layer->printCost();
+            cost += layer->getCost();
+        }
     }
     return cost;
 }
