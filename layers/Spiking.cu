@@ -118,9 +118,9 @@ __global__ void g_getMaxCount(
 
 /*
  * dim3 block = dim3(batch);
- * dim3 thread= dim3(1);
+ * dim3 thread= dim3(min(1024, outputDim));
  */
-__global__ void g_modifySpikes_output(
+__global__ void g_modifySpikes(
     bool* outputs,
     int* y,
     int* fireCount,
@@ -208,7 +208,7 @@ __global__ void g_Spiking_feedforward(
     int endTime,
 	int inputAmount,
 	int outputAmount,
-    float* vth,
+    float vth,
     int dummyFreq,
     int T_REFRAC,
     float TAU_M,
@@ -277,7 +277,7 @@ void Spiking::feedforward()
             endTime,
             inputAmount,
             outputAmount,
-            vth->getDev(),
+            threshold,
             dummyFreq,
             T_REFRAC,
             TAU_M,
@@ -317,22 +317,22 @@ void Spiking::backpropagation()
         g_getDelta_output<<<dim3(1), dim3(256)>>>(curDelta->getDev(), fireCount->getDev(), groundTruth->getDev(), curDelta->getLen(), MARGIN);
         cudaStreamSynchronize(0);
         getLastCudaError("Spiking::g_getDelta_output");
-
-        // modify the output spikes of the target neuron if it does not fire
-        // tricky: modify both the spike trains and output fire counts!
-        g_modifySpikes_output<<<dim3(batch), dim3(1)>>>(outputs->getDev(), predict, fireCount->getDev(), maxCount->getDev(), endTime, outputDim);
-        cudaStreamSynchronize(0);
-        getLastCudaError("Spiking::g_modifySpikes_output");
-
-        // retransform the binary matrix to the spike times since the outputs might be changed
-        g_response_2_spiketime<<<dim3(batch), dim3(min(outputDim, 1024))>>>(
-                outputs->getDev(),
-                outputs_time->getDev(),
-                outputDim,
-                endTime);
-        checkCudaErrors(cudaStreamSynchronize(0));
-        getLastCudaError("Spiking:g_response_2_spiketime");
     }
+
+    // modify the output spikes of the target neuron if it does not fire
+    // tricky: modify both the spike trains and output fire counts!
+    g_modifySpikes<<<dim3(batch), dim3(min(outputDim, 1024))>>>(outputs->getDev(), predict, fireCount->getDev(), maxCount->getDev(), endTime, outputDim);
+    cudaStreamSynchronize(0);
+    getLastCudaError("Spiking::g_modifySpikes");
+
+    // retransform the binary matrix to the spike times since the outputs might be changed
+    g_response_2_spiketime<<<dim3(batch), dim3(min(outputDim, 1024))>>>(
+            outputs->getDev(),
+            outputs_time->getDev(),
+            outputDim,
+            endTime);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("Spiking:g_response_2_spiketime");
 
     // compute preDelta: curDelta: batch * outputDIm; w: outputDim * inputDim
     assert(w.size() == 1);
@@ -681,6 +681,8 @@ Spiking::Spiking(std::string name)
     fireCount= new cuMatrix<int>(batch, outputDim, outputAmount);
     maxCount    = new cuMatrix<int>(batch, 1, 1);
 
+    predict = NULL;
+
     // only for the output
     if(config->m_name == std::string("output")){
         groundTruth = new cuMatrix<float>(batch, outputDim, 1);
@@ -704,7 +706,8 @@ Spiking::Spiking(std::string name)
             w_laterial.push_back(new cuMatrix<float>(outputDim, outputDim, 1));
         }
 	}
-
+    
+    threshold = config->m_vth;
     vth = new cuMatrix<float>(outputDim, 1, 1);
     vthDelta = new cuMatrix<float>(outputDim, 1, 1);
     vthDeltaTmp = new cuMatrix<float>(batch, outputDim, 1);
@@ -914,9 +917,9 @@ void Spiking::initRandom()
     }
 
     // initialize vth
-    float threshold = config->m_vth;
+    float thres = config->m_vth;
     for(int i = 0; i < outputDim; ++i){
-        vth->set(i, 0, 0, threshold);
+        vth->set(i, 0, 0, thres);
     }
     vth->toGpu();
 }
@@ -1442,26 +1445,31 @@ __global__ void g_getMaxCount(int* fireCount, int* maxCount, int cols)
 
 /*
  * dim3 block = dim3(batch, outputAmount);
- * dim3 thread= dim3(1);
+ * dim3 thread= dim3(min(1024, outputDim));
  */
-__global__ void g_modifySpikes_output(bool* outputs, int* y, int* fireCount, int* maxCount, int endTime, int outputDim)
+__global__ void g_modifySpikes(bool* outputs, int* y, int* fireCount, int* maxCount, int endTime, int outputDim)
 {
     int batchId = blockIdx.x;
-    int target = y[batchId];
+    int target = y == NULL ? -1 : y[batchId];
     int mCnt = maxCount[batchId]; 
     bool* outputSpikes = outputs + batchId * endTime * outputDim;
-    if(fireCount[target + batchId * outputDim] == 0)
-    {
-        int count = 0;
-        int interval = mCnt == 0 ? endTime/4 : endTime / mCnt;
-        for(int t = interval; t < endTime; t += interval)
+    for(int id = 0; id < outputDim; id += blockDim.x){
+        int o_idx = id + threadIdx.x;
+        if(o_idx < outputDim)
         {
-            outputSpikes[target + t * outputDim] = true;
-            count++;
+            if(fireCount[o_idx + batchId * outputDim] == 0)
+            {
+                int count = 0;
+                int interval = (mCnt == 0 || target != o_idx) ? endTime/4 : endTime / mCnt;
+                for(int t = interval; t < endTime; t += interval)
+                {
+                    outputSpikes[o_idx + t * outputDim] = true;
+                    count++;
+                }
+                fireCount[o_idx + batchId * outputDim] = count;
+            }
         }
-        fireCount[target + batchId * outputDim] = count;
     }
-    
 }
 
 
@@ -1481,7 +1489,7 @@ __global__ void g_Spiking_feedforward(
     int endTime,
 	int inputAmount,
 	int outputAmount,
-    float* vth,
+    float vth,
     int dummyFreq, 
     int T_REFRAC,
     float TAU_M,
@@ -1511,7 +1519,7 @@ __global__ void g_Spiking_feedforward(
         {
             float v  = 0.0f;
             float ep = 0.0f;
-            float threshold = vth[o_idx];
+            float threshold = vth;
             int t_ref= 0;
             float response = 0.0f;
             int fire_count = 0;
@@ -1636,11 +1644,11 @@ __global__ void g_Spiking_wgrad_spiketime(
             float delta_w = d_Spiking_gradient_spiketime(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], cDelta[o_idx], o_idx, i_idx, outputDim, inputDim, endTime, T_REFRAC, TAU_M, TAU_S);
             wgrad[i_idx + o_idx * inputDim] = delta_w;
 #ifdef DEBUG
-            if(i_idx == 157 && o_idx == 0){
-                printf("157 fires: ");
+            if(i_idx == 154 && o_idx == 56){
+                printf("%d fires: ", i_idx);
                 for(int i = 0; i < input_fireCount[i_idx]; i++)    printf("%d\t", input_time[i_idx * endTime + i]);
                 printf("\n");
-                printf("0 fires: ");
+                printf("%d fires: ", o_idx);
                 for(int j = 0; j < output_fireCount[o_idx]; j++)    printf("%d\t", output_time[o_idx * endTime + j]);
                 printf("\n");
             }

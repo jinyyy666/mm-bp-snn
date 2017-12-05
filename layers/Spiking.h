@@ -119,6 +119,7 @@ private:
     int * predict;
 	int batch;
     int T_REFRAC;
+    float threshold;
     float TAU_M;
     float TAU_S;
 	float lambda;
