@@ -8,7 +8,7 @@ WHITE_NOISE = 0.0;
 
 BATCH_SIZE = 1;                
 CHANNELS = 1;                   #1, 3, 4#
-END_TIME = 400;                 #The spike train duration#
+END_TIME = 449;                 #The spike train duration#
 
 
 TRAIN_SAMPLES = 1;              # number of train/test samples#
