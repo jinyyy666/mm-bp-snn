@@ -2,6 +2,7 @@
 #include <sstream>
 #include <fstream>
 #include <vector>
+#include <algorithm>
 #include <assert.h>
 #include <sys/stat.h>
 #include <dirent.h>
@@ -9,7 +10,7 @@
 
 
 //* recursively find the files
-void file_finder(const std::string& path, cuMatrixVector<bool>& x, std::vector<int>& labels, int cur_label, int& sample_count, int num_of_samples, int end_time, int input_neurons)
+void file_finder(const std::string& path, std::vector<std::pair<cuMatrix<bool>*, int> >& x, int cur_label, int& sample_count, int num_of_samples, int end_time, int input_neurons)
 {
     DIR *dir;
     struct dirent *ent; 
@@ -33,15 +34,14 @@ void file_finder(const std::string& path, cuMatrixVector<bool>& x, std::vector<i
         
         if(is_directory){
             assert(cur_label >= 0 && cur_label <= 9);
-            file_finder(full_file_name, x, labels, cur_label, sample_count, num_of_samples, end_time, input_neurons); 
+            file_finder(full_file_name, x, cur_label, sample_count, num_of_samples, end_time, input_neurons); 
         }
         else{
             // this is indeed the data file:
             std::string suffix = ".dat";
             assert(file_name.length() >= suffix.length() && file_name.substr(file_name.length() - suffix.length()) == suffix);
             //read_each_nmnist(full_file_name, x, end_time, input_neurons);
-            read_each_nmnist_inside(full_file_name, x, end_time, input_neurons);
-            labels.push_back(cur_label);
+            read_each_nmnist_inside(full_file_name, x, end_time, input_neurons, cur_label);
             sample_count++;
             printf("read %2d%%", 100 * sample_count / num_of_samples);
         }
@@ -81,7 +81,7 @@ void read_each_nmnist(const std::string& filename, cuMatrixVector<bool>& x, int 
 
 //* read each sample of NMnist dataset in terms of spikes time, do not translate them into binary
 //* tricky: do this to avoid the issue that the data cannot be loaded into the main memory
-void read_each_nmnist_inside(const std::string& filename, cuMatrixVector<bool>& x, int end_time, int input_neurons)
+void read_each_nmnist_inside(const std::string& filename, std::vector<std::pair<cuMatrix<bool>*, int > >& x, int end_time, int input_neurons, int cur_label)
 {
     std::ifstream f_in(filename.c_str());
     if(!f_in.is_open()){
@@ -110,7 +110,7 @@ void read_each_nmnist_inside(const std::string& filename, cuMatrixVector<bool>& 
     cuMatrix<bool>* tpmat = new cuMatrix<bool>(end_time, input_neurons, 1, sp_time);
     tpmat->freeCudaMem();
 
-    x.push_back(tpmat); 
+    x.push_back({tpmat, cur_label}); 
     f_in.close();
 }
 
@@ -120,8 +120,7 @@ void read_each_nmnist_inside(const std::string& filename, cuMatrixVector<bool>& 
 //* read the train data and label of the NMnist at the same time
 int readNMnist(
         std::string path, 
-        cuMatrixVector<bool>& x,
-        std::vector<int>& labels,
+        std::vector<std::pair<cuMatrix<bool>*, int> > & x,
         int num,
         int input_neurons,
         int end_time)
@@ -136,21 +135,23 @@ int readNMnist(
     if(path[path.length() - 1] == '/')  path = path.substr(0, path.length() - 1);
     //* recursively read the samples in the directory
     int sample_count = 0;
-    file_finder(path, x, labels, -1, sample_count, num, end_time, input_neurons);
+    file_finder(path, x, -1, sample_count, num, end_time, input_neurons);
     assert(x.size() == num);
-    assert(x.size() == labels.size());
 
+    //* random shuffle the train data, tricky! 
+    //* this is very important because the datafile are stored in ordered, but we want it
+    //* to be random when training
+    random_shuffle(x.begin(), x.end());
     return x.size();
 }
 
-
 //* read the label
-int readNMnistLabel(const std::vector<int>& labels, cuMatrix<int>* &mat){
-    for(int i = 0; i < labels.size(); ++i){
-        mat->set(i, 0, 0, labels[i]);
+int readNMnistLabel(const std::vector<std::pair<cuMatrix<bool>*, int> >& collect, cuMatrix<int>* &mat){
+    for(int i = 0; i < collect.size(); ++i){
+        mat->set(i, 0, 0, collect[i].second);
     }
     mat->toGpu();
-    return labels.size();
+    return collect.size();
 }
 
 
@@ -164,10 +165,13 @@ int readNMnistData(
         int end_time)
 {
 
-    std::vector<int> labels;
-    int len = readNMnist(path, x, labels, number_of_images, input_neurons, end_time);
+    std::vector<std::pair<cuMatrix<bool>*, int> > collect;
+    int len = readNMnist(path, collect, number_of_images, input_neurons, end_time);
+    //* read MNIST sample into cuMatrixVector
+    for(int i = 0; i < collect.size(); ++i) x.push_back(collect[i].first);
+
     //* read MNIST label into cuMatrix
     y = new cuMatrix<int>(len, 1, 1);
-    int t = readNMnistLabel(labels, y);
+    int t = readNMnistLabel(collect, y);
     return t;
 }
