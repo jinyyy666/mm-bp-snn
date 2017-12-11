@@ -152,9 +152,10 @@ void getSpikingNetworkCost(int* y)
  * block = dim3(1)
  * thread = dim3(batch)
  */
-__global__ void g_getPredict(int* batchfireCount, int cols,  int* vote)
+__global__ void g_getPredict(int* batchfireCount, int cols,  int start, int* vote)
 {
     int batchid = threadIdx.x;
+    if(batchid < start) return;
     int* p = batchfireCount + batchid * cols;
     int* votep = vote + batchid * cols;
 
@@ -212,6 +213,7 @@ void resultPredict(int* vote, int start)
             g_getPredict<<<dim3(1), Config::instance()->getBatchSize()>>>(
                     Layers::instance()->get(spiking_que[i]->m_name)->getFireCount()->getDev(),
                     Layers::instance()->get(spiking_que[i]->m_name)->getFireCount()->cols,
+                    start,
                     vote);
             cudaStreamSynchronize(0);
             getLastCudaError("g_getPredict");
@@ -296,6 +298,10 @@ void predictTestRate(cuMatrixVector<bool>&x,
         else{
             int tstart = testX.size() - batch;
             dl->getBatchSpikesWithStreams(testX, tstart);
+        }
+
+        if(start + batch > (int)testX.size()){
+            start = (int)testX.size() - batch;
         }
 
         dl->testData();
