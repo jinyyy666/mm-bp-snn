@@ -9,17 +9,17 @@
 #include <cuda_runtime_api.h>
 
 
-//* recursively find the files
-void file_finder(const std::string& path, std::vector<std::pair<cuMatrix<bool>*, int> >& x, int cur_label, int& sample_count, int num_of_samples, int end_time, int input_neurons)
+//* find the data samples in the directory
+void file_finder(const std::string& path, std::vector<std::pair<cuMatrix<bool>*, int> >& x, int sample_per_class, int end_time, int input_neurons)
 {
     DIR *dir;
     struct dirent *ent; 
     struct stat st;
 
     dir = opendir(path.c_str());
+    std::vector<int> quota(10, sample_per_class);
+    
     while((ent = readdir(dir)) != NULL){
-        if(sample_count >= num_of_samples)  return;
-
         std::string file_name = ent->d_name;
         std::string full_file_name = path + "/" + file_name;
         if(file_name[0] == '.') continue;
@@ -27,23 +27,25 @@ void file_finder(const std::string& path, std::vector<std::pair<cuMatrix<bool>*,
         if(stat(full_file_name.c_str(), &st) == -1) continue;
 
         bool is_directory = (st.st_mode & S_IFDIR) != 0;
-        if(file_name.length() == 1){
-            cur_label = atoi(file_name.c_str());
-            assert(cur_label >= 0 && cur_label <= 9);
-        }
-        
+        int num_of_samples = file_name.find("Train") != std::string::npos ? 60000 : 10000;
+        if(sample_per_class != -1)  num_of_samples = sample_per_class * 10;
+      
         if(is_directory){
-            assert(cur_label >= 0 && cur_label <= 9);
-            file_finder(full_file_name, x, cur_label, sample_count, num_of_samples, end_time, input_neurons); 
+            printf("Do not support recursively read the directories of directory anymore!");
+            assert(0);
         }
         else{
             // this is indeed the data file:
             std::string suffix = ".dat";
             assert(file_name.length() >= suffix.length() && file_name.substr(file_name.length() - suffix.length()) == suffix);
-            //read_each_nmnist(full_file_name, x, end_time, input_neurons);
-            read_each_nmnist_inside(full_file_name, x, end_time, input_neurons, cur_label);
-            sample_count++;
-            printf("read %2d%%", 100 * sample_count / num_of_samples);
+            // handle the new data format
+            size_t pos = file_name.find('_');
+            assert(pos != string::npos);
+            int cur_label = atoi(file_name.substr(pos+1).c_str());
+            assert(cur_label >= 0 && cur_label < quota.size());
+            
+            read_each_nmnist_inside(full_file_name, x, end_time, input_neurons, cur_label, quota);
+            printf("read %2d%%", 100 * int(x.size()) / num_of_samples);
         }
         printf("\b\b\b\b\b\b\b\b");
     }
@@ -81,17 +83,35 @@ void read_each_nmnist(const std::string& filename, cuMatrixVector<bool>& x, int 
 
 //* read each sample of NMnist dataset in terms of spikes time, do not translate them into binary
 //* tricky: do this to avoid the issue that the data cannot be loaded into the main memory
-void read_each_nmnist_inside(const std::string& filename, std::vector<std::pair<cuMatrix<bool>*, int > >& x, int end_time, int input_neurons, int cur_label)
+void read_each_nmnist_inside(const std::string& filename, std::vector<std::pair<cuMatrix<bool>*, int > >& x, int end_time, int input_neurons, int cur_label, std::vector<int>& quota)
 {
     std::ifstream f_in(filename.c_str());
     if(!f_in.is_open()){
         std::cout<<"Cannot open the file: "<<filename<<std::endl;
         exit(EXIT_FAILURE);
     }
-    vector<vector<int> > * sp_time = new vector<vector<int> >(input_neurons, vector<int>());
-    int index = 0;
     std::string times;
+    int index = 0;
+    bool new_file = true;
+    vector<vector<int> > * sp_time = NULL;
     while(getline(f_in, times)){
+        if(times[0] == '#'){
+            new_file = true;
+            continue;
+        }
+        if(new_file){
+            if(quota[cur_label] == 0)   break;
+            if(quota[cur_label] > 0)    quota[cur_label]--;
+
+            // prepare to read a new sample
+            sp_time = new vector<vector<int> >(input_neurons, vector<int>());
+            cuMatrix<bool>* tpmat = new cuMatrix<bool>(end_time, input_neurons, 1, sp_time);
+            tpmat->freeCudaMem();
+            x.push_back({tpmat, cur_label}); 
+            
+            index = 0;
+            new_file = false;
+        }
         std::istringstream iss(times);
         int time;
         // each line start with the input neuron index (1 based)
@@ -104,13 +124,8 @@ void read_each_nmnist_inside(const std::string& filename, std::vector<std::pair<
             if(time + 1 >= end_time || index >= input_neurons) continue;
             (*sp_time)[index].push_back(time+1);
         }
-        index++;
     }
 
-    cuMatrix<bool>* tpmat = new cuMatrix<bool>(end_time, input_neurons, 1, sp_time);
-    tpmat->freeCudaMem();
-
-    x.push_back({tpmat, cur_label}); 
     f_in.close();
 }
 
@@ -121,7 +136,7 @@ void read_each_nmnist_inside(const std::string& filename, std::vector<std::pair<
 int readNMnist(
         std::string path, 
         std::vector<std::pair<cuMatrix<bool>*, int> > & x,
-        int num,
+        int sample_per_class,
         int input_neurons,
         int end_time)
 {
@@ -133,10 +148,8 @@ int readNMnist(
     } 
 
     if(path[path.length() - 1] == '/')  path = path.substr(0, path.length() - 1);
-    //* recursively read the samples in the directory
-    int sample_count = 0;
-    file_finder(path, x, -1, sample_count, num, end_time, input_neurons);
-    assert(x.size() == num);
+    //* read the samples in the directory
+    file_finder(path, x, sample_per_class, end_time, input_neurons);
 
     //* random shuffle the train data, tricky! 
     //* this is very important because the datafile are stored in ordered, but we want it
@@ -160,13 +173,13 @@ int readNMnistData(
         cuMatrixVector<bool>& x,
         cuMatrix<int>*& y, 
         std::string path,
-        int number_of_images,
+        int samples_per_class,
         int input_neurons,
         int end_time)
 {
 
     std::vector<std::pair<cuMatrix<bool>*, int> > collect;
-    int len = readNMnist(path, collect, number_of_images, input_neurons, end_time);
+    int len = readNMnist(path, collect, samples_per_class, input_neurons, end_time);
     //* read MNIST sample into cuMatrixVector
     for(int i = 0; i < collect.size(); ++i) x.push_back(collect[i].first);
 

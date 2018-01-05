@@ -18,8 +18,13 @@
 
 
 int cuSCurCorrect;
-cuMatrix<int>*cuSCorrect = NULL;
-cuMatrix<int>*cuSVote = NULL;
+cuMatrix<int>*  cuSCorrect = NULL;
+cuMatrix<int>*  cuSVote = NULL;
+cuMatrix<bool>* cuSPredictions = NULL;
+cuMatrix<int>*  cuSTrCorrect = NULL;
+cuMatrix<int>*  cuSTrVote = NULL;
+cuMatrix<bool>* cuSTrPredictions = NULL;
+cuMatrix<float>* cuSampleWeight = NULL;
 std::vector<ConfigBase*> spiking_que;
 
 void cuSaveSpikingNet()
@@ -99,8 +104,24 @@ void buildSpikingNetwork(int trainLen, int testLen)
 	{
 		cuSCorrect = new cuMatrix<int>(1,1,1);
 		cuSVote    = new cuMatrix<int>(testLen, Config::instance()->getClasses(), 1);
+        cuSPredictions = new cuMatrix<bool>(testLen, 1, 1);
 	}
-
+    //* cuSTrCorrect and cuSTrVote for tracking the training results
+    if(cuSTrCorrect == NULL)
+    {
+        cuSTrCorrect = new cuMatrix<int>(1,1,1);
+        cuSTrVote = new cuMatrix<int>(trainLen, Config::instance()->getClasses(), 1);
+        cuSTrPredictions = new cuMatrix<bool>(trainLen, 1, 1);
+    }
+    // boost weighted training
+    if(cuSampleWeight == NULL)
+    {
+        cuSampleWeight = new cuMatrix<float>(trainLen, 1, 1);
+        for(int i = 0; i < cuSampleWeight->getLen(); i++){
+            cuSampleWeight->getHost()[i] = 1.0f;
+        }
+        cuSampleWeight->toGpu();
+    }
 }
 
 void cuFreeSNNMemory(
@@ -108,43 +129,6 @@ void cuFreeSNNMemory(
         cuMatrixVector<bool>&trainX, 
         cuMatrixVector<bool>&testX)
 {
-}
-
-void getSpikingNetworkCost(int* y)
-{
-    /*feedforward*/
-    for(int i = 0; i < (int)spiking_que.size(); i++){
-        if(spiking_que[i]->m_name == std::string("output") || spiking_que[i]->m_type == std::string("SOFTMAXSPIKING")){
-            SpikingLayerBase* output = (SpikingLayerBase*)Layers::instance()->get(spiking_que[i]->m_name);
-            output->setPredict(y);
-        }
-    }
-
-
-    for(int i = 0; i < (int)spiking_que.size(); i++){
-        LayerBase* layer = Layers::instance()->get(spiking_que[i]->m_name);
-        layer->feedforward();
-    }
-
-    /*backpropagation*/
-    bool has_dynamic_threshold = Config::instance()->hasDynamicThreshold(); 
-    for(int i = (int)spiking_que.size() - 1; i >=0; i--){
-        ConfigBase* top = spiking_que[i];
-        if(top->m_name == std::string("reservoir")) continue;
-
-        SpikingLayerBase* layer = (SpikingLayerBase*)Layers::instance()->get(top->m_name);
-
-        layer->backpropagation();
-        layer->getGrad();
-        layer->updateWeight();
-        if(has_dynamic_threshold && top->m_name != std::string("output"))
-        {
-            layer->getDeltaVth();
-            layer->updateVth();
-        }
-    }
-    cudaStreamSynchronize(Layers::instance()->get_stream());
-    getLastCudaError("updateWB");
 }
 
 /*
@@ -198,16 +182,9 @@ __global__ void g_getPredict_softmax(float* softMaxP, int cols,  int start, int*
 	votep[r]++;
 }
 
-
-
-void resultPredict(int* vote, int start)
+//* get the prediction from the spiking output layer
+void outputPredict(int* vote, int start)
 {
-    /*feedforward*/
-    for(int i = 0; i < (int)spiking_que.size(); i++){
-        LayerBase* layer = Layers::instance()->get(spiking_que[i]->m_name);
-        layer->feedforward();
-    }
-
     for(int i = 0; i < (int)spiking_que.size(); i++){
         if(spiking_que[i]->m_name == std::string("output")){
             g_getPredict<<<dim3(1), Config::instance()->getBatchSize()>>>(
@@ -228,6 +205,67 @@ void resultPredict(int* vote, int start)
             getLastCudaError("g_getPredict_softmax");
 		}
     }
+   
+}
+
+
+
+void getSpikingNetworkCost(int* y, int* vote, int start)
+{
+    /*feedforward*/
+    for(int i = 0; i < (int)spiking_que.size(); i++){
+        if(spiking_que[i]->m_name == std::string("output") || spiking_que[i]->m_type == std::string("SOFTMAXSPIKING")){
+            SpikingLayerBase* output = (SpikingLayerBase*)Layers::instance()->get(spiking_que[i]->m_name);
+            output->setPredict(y);
+        }
+    }
+
+    for(int i = 0; i < (int)spiking_que.size(); i++){
+        LayerBase* layer = Layers::instance()->get(spiking_que[i]->m_name);
+        layer->feedforward();
+    }
+    
+    /*record the prediction*/
+    outputPredict(vote, start);
+
+    /*backpropagation*/
+    bool has_dynamic_threshold = Config::instance()->hasDynamicThreshold(); 
+    for(int i = (int)spiking_que.size() - 1; i >=0; i--){
+        ConfigBase* top = spiking_que[i];
+        if(top->m_name == std::string("reservoir")) continue;
+
+        SpikingLayerBase* layer = (SpikingLayerBase*)Layers::instance()->get(top->m_name);
+
+        layer->backpropagation();
+        layer->getGrad();
+        layer->updateWeight();
+        if(has_dynamic_threshold && top->m_name != std::string("output"))
+        {
+            layer->getDeltaVth();
+            layer->updateVth();
+        }
+    }
+    cudaStreamSynchronize(Layers::instance()->get_stream());
+    getLastCudaError("updateWB");
+}
+
+void resultPredict(int* y, int* vote, int start)
+{
+    /*feedforward*/
+    for(int i = 0; i < (int)spiking_que.size(); i++){
+        if(spiking_que[i]->m_name == std::string("output") || spiking_que[i]->m_type == std::string("SOFTMAXSPIKING")){
+            SpikingLayerBase* output = (SpikingLayerBase*)Layers::instance()->get(spiking_que[i]->m_name);
+            output->setPredict(y);
+        }
+    }
+
+    for(int i = 0; i < (int)spiking_que.size(); i++){
+        LayerBase* layer = Layers::instance()->get(spiking_que[i]->m_name);
+        layer->feedforward();
+    }
+
+    /*obtain the prediction predict*/
+    outputPredict(vote, start);
 }
 
 void gradientChecking(bool**x, int*y, int batch, int nclasses, cublasHandle_t handle)
@@ -238,7 +276,7 @@ void gradientChecking(bool**x, int*y, int batch, int nclasses, cublasHandle_t ha
  * block = (testX.size() + batch - 1) / batch
  * thread = batch
  */
-void __global__ g_getSpikeVotingResult(int* voting, int* y, int* correct, int len, int nclasses)
+void __global__ g_getSpikeVotingResult(int* voting, int* y, int* correct, bool* predictions, int len, int nclasses)
 {
     for(int i = 0; i < len; i += blockDim.x * gridDim.x)
     {
@@ -259,7 +297,70 @@ void __global__ g_getSpikeVotingResult(int* voting, int* y, int* correct, int le
             if(rid == y[idx])
             {
                 atomicAdd(correct, 1);
+                predictions[idx] = true;
             }
+        }
+    }
+}
+
+/*
+ * block = 1
+ * thread = nclasses
+ */
+void __global__ g_boostWeightUpdate(float* weights, bool* predictions, int* y, int len, int nclasses)
+{
+	extern __shared__ float sums[];
+    float * sum_weights = (float*)sums;
+    float * error_weighted = (float*)&sums[nclasses];
+
+    int tid = threadIdx.x;
+    sum_weights[tid] = 0;
+    error_weighted[tid] = 0;
+    __syncthreads();
+
+    // 1. compute the sum of the boosting weight for each class
+    for(int i = 0; i < len; i += blockDim.x)
+    {
+        int idx = i + tid;
+        if(idx < len)
+        {
+            int cls = y[idx];
+            float w = weights[idx];
+            atomicAdd(&sum_weights[cls], w);
+        }
+    }
+    __syncthreads();
+    
+    // 2. compute the weighted error for each class 
+    for(int i = 0; i < len; i += blockDim.x)
+    {
+        int idx = i + tid;
+        if(idx < len)
+        {
+            int cls = y[idx];
+            bool prediction = predictions[idx];
+            float w = weights[idx];
+            atomicAdd(&error_weighted[cls], w*(!prediction)/sum_weights[cls]);
+        } 
+    }
+    __syncthreads();
+
+    // 3. update the boost weight for each training sample
+    for(int i = 0; i < len; i += blockDim.x)
+    {
+        int idx = i + tid;
+        if(idx < len)
+        {
+            bool prediction = predictions[idx];
+            int cls = y[idx];
+            float w = weights[idx];
+            float stage = error_weighted[cls]/20.0f;
+            float new_w = w * __expf(stage * (!prediction));
+            weights[idx] = new_w;
+            if(prediction)
+                printf("Sample: %d predicts correctly old sample weight: %f new sample weight %f\n", cls, w, new_w);
+            else 
+                printf("Sample: %d predicts incorrectly old sample weight: %f new sample weight %f\n", cls, w, new_w);
         }
     }
 }
@@ -305,15 +406,17 @@ void predictTestRate(cuMatrixVector<bool>&x,
         }
 
         dl->testData();
-        resultPredict(cuSVote->getDev() + start * nclasses, k * batch - start);
+        resultPredict(testY->getDev() + start, cuSVote->getDev() + start * nclasses, k * batch - start);
         printf("\b\b\b\b\b\b\b\b\b");
     }
 
     cuSCorrect->gpuClear();
+    cuSPredictions->gpuClear();
     g_getSpikeVotingResult<<<dim3((testX.size() + batch - 1) / batch), dim3(batch)>>>(
             cuSVote->getDev(),
             testY->getDev(),
             cuSCorrect->getDev(),
+            cuSPredictions->getDev(),
             testX.size(),
             nclasses);
     cudaStreamSynchronize(0);
@@ -332,7 +435,6 @@ float getSpikingCost(){
         if(spiking_que[i]->m_name == "output" || spiking_que[i]->m_type == std::string("SOFTMAXSPIKING")){
             LayerBase* layer = (LayerBase*)Layers::instance()->get(spiking_que[i]->m_name);
             layer->calCost();
-            layer->printCost();
             cost += layer->getCost();
         }
     }
@@ -359,7 +461,6 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
 
     if(Config::instance()->getIsGradientChecking())
         gradientChecking(x.m_devPoint, y->getDev(), batch, nclasses, handle);
-
 
     float my_start = (float)clock();
     predictTestRate(x, y, testX, testY, batch, nclasses, handle);
@@ -402,11 +503,13 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
 
         Config::instance()->setTraining(true);
 
-        x.shuffle(5000, y);
+        x.shuffle(5000, y, cuSampleWeight);
 
         DataLayerSpiking *dl = static_cast<DataLayerSpiking*>(Layers::instance()->get("data"));
         dl->getBatchSpikesWithStreams(x, 0);
 
+        cuSTrVote->gpuClear();
+        float cost = 0.0f;
         for (int k = 0; k < ((int)x.size() + batch - 1) / batch; k ++) {
             dl->synchronize();
             int start = k * batch;
@@ -418,13 +521,16 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
                 int tstart = x.size() - batch;
                 dl->getBatchSpikesWithStreams(x, tstart);
             }
+            if(start + batch > (int)x.size()){
+                start = (int)x.size() - batch;   
+            }
  
             dl->trainData();
-            getSpikingNetworkCost(y->getDev() + start);
+            getSpikingNetworkCost(y->getDev() + start, cuSTrVote->getDev() + start * nclasses, k * batch - start);
+            cost += getSpikingCost();
             printf("\b\b\b\b\b\b\b\b\b");
         }
-
-        float cost = getSpikingCost();
+        cost /= (float)x.size();
 
         end = (float)clock();
         sprintf(logStr, "epoch=%d time=%.03lfs cost=%f Momentum=%.06lf lrate=%.08lf\n",
@@ -432,6 +538,34 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
                 cost,
                 Config::instance()->getMomentum(), Config::instance()->getLrate());
         LOG(logStr, "Result/log.txt");
+
+        cuSTrCorrect->gpuClear();
+        cuSTrPredictions->gpuClear();
+        g_getSpikeVotingResult<<<dim3((x.size() + batch - 1) / batch), dim3(batch)>>>(
+                cuSTrVote->getDev(),
+                y->getDev(),
+                cuSTrCorrect->getDev(),
+                cuSTrPredictions->getDev(),
+                x.size(),
+                nclasses);
+        cudaStreamSynchronize(0);
+        getLastCudaError("g_getSpikeVotingResult");
+        cuSTrCorrect->toCpu();
+
+        sprintf(logStr, "train performance: %.2lf%%\n", 100.0 * cuSTrCorrect->get(0, 0, 0) / x.size());
+        LOG(logStr, "Result/log.txt");
+    
+        if (Config::instance()->hasBoostWeightTrain()) {               
+            g_boostWeightUpdate<<<dim3(1), dim3(nclasses), sizeof(float) * 2 * nclasses>>>(
+                cuSampleWeight->getDev(), 
+                cuSTrPredictions->getDev(), 
+                y->getDev(), 
+                x.size(), 
+                nclasses);
+            cudaStreamSynchronize(0);
+            getLastCudaError("g_getSpikeVotingResult");
+            cuSampleWeight->toCpu();
+        }
 
         if (epo && epo % epoCount[id] == 0) {
             id++;

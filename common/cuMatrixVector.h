@@ -24,8 +24,7 @@ public:
 	}
 	cuMatrix<T>* operator[](size_t index){
 		if(index >= m_vec.size()){
-			//Assert(true);
-			printf("cuMatrix Vector operator[] error\n");
+			printf("cuMatrix Vector operator[] error: try to access %zu_th element, but the vector has %zu elements\n", index, m_vec.size());
 			exit(0);
 		}
 		return m_vec[index];
@@ -64,7 +63,7 @@ public:
 	}
 
 
-	void shuffle(int times, cuMatrix<int>*&labels){
+	void shuffle(int times, cuMatrix<int>*&labels, cuMatrix<float>*&weights){
 		cudaError_t cudaStat;
 
 		for(int i = 0; i < times; i++){
@@ -74,6 +73,7 @@ public:
 			if(m_hstPoint)
 				swap(m_hstPoint[x], m_hstPoint[y]);
 			swap(labels->getHost()[x], labels->getHost()[y]);
+            swap(weights->getHost()[x], weights->getHost()[y]);
 		}
 		if(NULL != m_hstPoint && NULL != m_devPoint)
 		{
@@ -85,6 +85,7 @@ public:
 		}
 
 		labels->toGpu();
+        weights->toGpu();
 	}
 
 	vector<cuMatrix<T>*>m_vec;

@@ -20,6 +20,18 @@ private:
 };
 
 
+class ConfigBoostWeight
+{
+public:
+    ConfigBoostWeight(bool hasBoostWeight)
+    {
+        m_hasBoostWeight = hasBoostWeight;
+    }
+    bool getValue(){return m_hasBoostWeight;}
+private:
+    bool m_hasBoostWeight;
+};
+
 
 class ConfigImageShow
 {
@@ -66,22 +78,28 @@ private:
 class ConfigDataset
 {
 public:
-    ConfigDataset(std::string train_path, std::string test_path, int train_samples, int test_samples)
+    ConfigDataset(std::string train_path, std::string test_path, int train_samples, int test_samples, int train_per_class, int test_per_class)
     {
         m_trainPath = train_path;
         m_testPath = test_path;
         m_trainSamples = train_samples;
         m_testSamples = test_samples;
+        m_trainPerClass = train_per_class;
+        m_testPerClass = test_per_class;    
     }
     std::string getTrainPath(){return m_trainPath;}
     std::string getTestPath(){return m_testPath;}
     int getTrainSamples(){return m_trainSamples;}
     int getTestSamples(){return m_testSamples;}
+    int getTrainPerClass(){return m_trainPerClass;}
+    int getTestPerClass(){return m_testPerClass;}
 private:
     std::string m_trainPath;
     std::string m_testPath;
     int m_trainSamples;
     int m_testSamples;
+    int m_trainPerClass;
+    int m_testPerClass;
 };
 
 class ConfigTestEpoch
@@ -633,6 +651,7 @@ public:
 
 		delete  m_nonLinearity;
 		delete  m_isGradientChecking;
+        delete  m_hasBoostWeightTrain;
 		delete  m_batchSize;
 		delete  m_channels;
 
@@ -650,6 +669,10 @@ public:
 
 	bool getIsGradientChecking(){
 		return m_isGradientChecking->getValue();}
+
+    bool hasBoostWeightTrain(){
+        return m_hasBoostWeightTrain->getValue();
+    }
 
 	int getBatchSize(){
 		return m_batchSize->getValue();}
@@ -745,6 +768,14 @@ public:
         return m_dataset->getTestSamples();
     }
 
+    int getTrainPerClass(){
+        return m_dataset->getTrainPerClass();
+    }
+
+    int getTestPerClass(){
+        return m_dataset->getTestPerClass();
+    }
+
     void setEndTime(int end_time){
         m_endTime = end_time;
     }
@@ -774,6 +805,7 @@ private:
 
 	ConfigNonLinearity       *m_nonLinearity;
 	ConfigGradient           *m_isGradientChecking;
+    ConfigBoostWeight        *m_hasBoostWeightTrain;
 	ConfigBatchSize          *m_batchSize;
 	ConfigChannels           *m_channels;
 

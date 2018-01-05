@@ -515,7 +515,13 @@ void Config::init(std::string path)
     
     /*DYNAMIC_THRESHOLD*/
     m_allowDynamicThreshold = get_word_bool(m_configStr, "DYNAMIC_THRESHOLD");
-    sprintf(logStr, "Allow Dynamic Threshold : %d\n", is_gradient_checking);
+    sprintf(logStr, "Allow Dynamic Threshold : %d\n", m_allowDynamicThreshold);
+    LOG(logStr, "Result/log.txt");
+
+    /*BOOST_METHOD*/
+    bool has_boost_weight = get_word_bool(m_configStr, "BOOST_METHOD");
+    m_hasBoostWeightTrain = new ConfigBoostWeight(has_boost_weight);
+    sprintf(logStr, "Has Boost Weight Train: %d\n", has_boost_weight);
     LOG(logStr, "Result/log.txt");
 
     /*BATCH_SIZE*/
@@ -589,12 +595,22 @@ void Config::init(std::string path)
     std::string test_path = get_word_type(m_configStr, "TEST_DATA_PATH");
     int train_samples = get_word_int(m_configStr, "TRAIN_SAMPLES");
     int test_samples  = get_word_int(m_configStr, "TEST_SAMPLES");
-    m_dataset = new ConfigDataset(train_path, test_path, train_samples, test_samples);
+    int train_per_class = get_word_int(m_configStr, "TRAIN_PER_CLASS");
+    int test_per_class = get_word_int(m_configStr, "TEST_PER_CLASS");
+    m_dataset = new ConfigDataset(train_path, test_path, train_samples, test_samples, train_per_class, test_per_class);
     sprintf(logStr, "Train data path       : %s\n", train_path.c_str());
     LOG(logStr, "Result/log.txt");
     sprintf(logStr, "Test data path        : %s\n", test_path.c_str());
     LOG(logStr, "Result/log.txt");
-    
+    sprintf(logStr, "Train samples         : %d\n", train_samples);
+    LOG(logStr, "Result/log.txt");
+    sprintf(logStr, "Test samples          : %d\n", test_samples);
+    LOG(logStr, "Result/log.txt");
+    sprintf(logStr, "Train samples per class : %d\n", train_per_class);
+    LOG(logStr, "Result/log.txt");
+    sprintf(logStr, "Test samples per class  : %d\n", test_per_class);
+    LOG(logStr, "Result/log.txt");
+  
 
     /*Layers*/
     get_layers_config(m_configStr);

@@ -30,6 +30,7 @@
 int cuCurCorrect;
 cuMatrix<int>*cuCorrect = NULL;
 cuMatrix<int>*cuVote = NULL;
+cuMatrix<float>*cuWeight = NULL;
 std::vector<ConfigBase*>que;
 
 void cuSaveConvNet()
@@ -141,6 +142,10 @@ void buildNetWork(int trainLen, int testLen)
 	{
 		cuCorrect = new cuMatrix<int>(1,1,1);
 		cuVote    = new cuMatrix<int>(testLen, Config::instance()->getClasses(), 1);
+        cuWeight  = new cuMatrix<float>(testLen, 1, 1);
+        for(int i = 0; i < cuWeight->getLen(); i++){
+            cuWeight->getHost()[i] = 1.0f;
+        }
 	}
 }
 
@@ -439,7 +444,7 @@ void cuTrainNetwork(cuMatrixVector<float>&x,
 
 		Config::instance()->setTraining(true);
 
-		x.shuffle(5000, y);
+		x.shuffle(5000, y, cuWeight);
 
 		DataLayer *dl = static_cast<DataLayer*>(Layers::instance()->get("data"));
 		dl->getBatchImageWithStreams(x, 0);

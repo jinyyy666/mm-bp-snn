@@ -14,7 +14,7 @@
 int readNMnistData(cuMatrixVector<bool> &x,
 	cuMatrix<int>* &y, 
 	std::string path,
-	int number_of_images,
+	int samples_per_class,
 	int input_neurons,
     int end_time);
 
@@ -28,10 +28,10 @@ int readNMnist(std::string path, std::vector<std::pair<cuMatrix<bool>*, int> >& 
 void read_each_nmnist(const std::string& filename, cuMatrixVector<bool>& x, int nrows, int ncols);
 
 //* read each nmnist file into the spike times
-void read_each_nmnist_inside(const std::string& filename, std::vector<std::pair<cuMatrix<bool>* , int> >& x, int end_time, int input_neurons, int cur_label);
+void read_each_nmnist_inside(const std::string& filename, std::vector<std::pair<cuMatrix<bool>* , int> >& x, int end_time, int input_neurons, int cur_label, std::vector<int>& quota);
 
 
-//* read the given directory recursively
-void file_finder(const std::string& path, std::vector<std::pair<cuMatrix<bool>*, int> >& x, int cur_label, int& sample_count, int num_of_samples, int end_time, int input_neurons);
+//* read the data from the given directory
+void file_finder(const std::string& path, std::vector<std::pair<cuMatrix<bool>*, int> >& x, int sample_per_class, int end_time, int input_neurons);
 
 #endif
