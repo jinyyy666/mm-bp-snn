@@ -268,10 +268,10 @@ void checkMatrixIsSame(cuMatrix<float>*x, cuMatrix<float>*y)
         for(int j = 0; j < x->cols; j++){
             for(int k = 0; k < x->channels; k++){
                 float diff = x->get(i, j, k) - y->get(i, j, k);
-                if(fabs(diff) > 0.001){
+                if(fabs(diff) > 0.0001){
                     printf("\n%d %d %d %f %f %f\n", i, j, k, x->get(i,j, k), y->get(i,j,k), diff);
-               }
-                assert(fabs(diff) < 0.001);
+                }
+                assert(fabs(diff) < 0.0001);
             }
         }
     }

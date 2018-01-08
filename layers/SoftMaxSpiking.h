@@ -52,6 +52,10 @@ public:
 		predict = p;
 	}
 
+    void setSampleWeight(float* s_weights){
+        sample_weights = s_weights;
+    }
+
     void printFireCount(){
         char logStr[1024];
 		sprintf(logStr, "%s:\n",m_name.c_str());
@@ -79,6 +83,7 @@ private:
 	cuMatrix<float>* momentum_w;
 	cuMatrix<float>* momentum_b;
 	int* predict;
+    float* sample_weights;
 
 	float lambda;
 	int batch;

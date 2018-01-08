@@ -33,6 +33,26 @@ private:
 };
 
 
+class ConfigWeightReg
+{
+public:
+    ConfigWeightReg(float lambda, float beta):m_lambda(lambda), m_beta(beta){}
+    float getLambda(){return m_lambda;}
+    float getBeta(){return m_beta;}
+private:
+    float m_lambda;
+    float m_beta;
+};
+
+class ConfigWeightLimit
+{
+public:
+    ConfigWeightLimit(float limit):m_limit(limit){}
+    float getLimit(){return m_limit;}
+private:
+    float m_limit;
+};
+
 class ConfigImageShow
 {
 public:
@@ -519,7 +539,7 @@ class ConfigSpiking : public ConfigBase
 {
 public:
 	ConfigSpiking(std::string name, std::string type, std::string input, int num_classes,
-        int num_neurons, float weight_decay, float vth, float t_refrac, float tau_m, float tau_s,
+        int num_neurons, float vth, float t_refrac, float tau_m, float tau_s,
         float initW, int weight_connect, std::string initType, std::string weight_path,
         std::string lweight_path, std::string laterial_type, std::string r_dim, 
         float local_inb_strength, float undesired_level, float desired_level, float margin, 
@@ -530,7 +550,6 @@ public:
         m_input = input;
         m_numNeurons = num_neurons;
         m_classes = num_classes;
-        m_weightDecay = weight_decay;
         m_vth = vth;
         m_t_ref = t_refrac;
         m_tau_m = tau_m;
@@ -554,6 +573,7 @@ public:
         m_dummyFreq = dummy_freq;
 	}
     bool hasLaterialWeight(){return m_laterialType != std::string("NULL");}
+    bool hasLaterialInh(){return m_laterialType == std::string("LOCAL_INHIBITION");}
     std::vector<int> parseDim(std::string s){
         std::vector<int> dim;
         size_t pos = 0;
@@ -570,7 +590,6 @@ public:
     int getBiasFreq(){return m_dummyFreq;}
     int m_numNeurons;
     int m_classes;
-	float m_weightDecay;
     float m_vth;
     int m_t_ref;
     float m_tau_m;
@@ -673,7 +692,15 @@ public:
     bool hasBoostWeightTrain(){
         return m_hasBoostWeightTrain->getValue();
     }
-
+    float getLambda(){
+        return m_weightReg->getLambda();
+    }
+    float getBeta(){
+        return m_weightReg->getBeta();
+    }
+    float getWeightLimit(){
+        return m_weightLimit->getLimit();
+    }
 	int getBatchSize(){
 		return m_batchSize->getValue();}
 
@@ -806,6 +833,8 @@ private:
 	ConfigNonLinearity       *m_nonLinearity;
 	ConfigGradient           *m_isGradientChecking;
     ConfigBoostWeight        *m_hasBoostWeightTrain;
+    ConfigWeightReg          *m_weightReg;
+    ConfigWeightLimit        *m_weightLimit;
 	ConfigBatchSize          *m_batchSize;
 	ConfigChannels           *m_channels;
 

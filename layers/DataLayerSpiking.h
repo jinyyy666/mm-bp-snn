@@ -29,6 +29,7 @@ public:
 	void initFromCheckpoint(FILE* file){};
 	void save(FILE* file){};
     void setPredict(int * p){};
+    void setSampleWeight(float * s_weights){};
 
 	~DataLayerSpiking(){
 		delete outputs;

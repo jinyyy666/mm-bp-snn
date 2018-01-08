@@ -210,13 +210,14 @@ void outputPredict(int* vote, int start)
 
 
 
-void getSpikingNetworkCost(int* y, int* vote, int start)
+void getSpikingNetworkCost(int* y, float* weights, int* vote, int start)
 {
     /*feedforward*/
     for(int i = 0; i < (int)spiking_que.size(); i++){
         if(spiking_que[i]->m_name == std::string("output") || spiking_que[i]->m_type == std::string("SOFTMAXSPIKING")){
             SpikingLayerBase* output = (SpikingLayerBase*)Layers::instance()->get(spiking_que[i]->m_name);
             output->setPredict(y);
+            output->setSampleWeight(weights);
         }
     }
 
@@ -503,7 +504,7 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
 
         Config::instance()->setTraining(true);
 
-        x.shuffle(5000, y, cuSampleWeight);
+        //x.shuffle(5000, y, cuSampleWeight);
 
         DataLayerSpiking *dl = static_cast<DataLayerSpiking*>(Layers::instance()->get("data"));
         dl->getBatchSpikesWithStreams(x, 0);
@@ -526,9 +527,19 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
             }
  
             dl->trainData();
-            getSpikingNetworkCost(y->getDev() + start, cuSTrVote->getDev() + start * nclasses, k * batch - start);
+            getSpikingNetworkCost(
+                y->getDev() + start, 
+                cuSampleWeight->getDev() + start, 
+                cuSTrVote->getDev() + start * nclasses, 
+                k * batch - start);
             cost += getSpikingCost();
             printf("\b\b\b\b\b\b\b\b\b");
+            for(int ii = 0; ii < (int)spiking_que.size(); ii++){ 
+                if(spiking_que[ii]->m_name == std::string("output") ){
+                    SpikingLayerBase* layer = (SpikingLayerBase*) Layers::instance()->get(spiking_que[ii]->m_name); 
+                    layer->printFireCount();
+                }
+            }
         }
         cost /= (float)x.size();
 

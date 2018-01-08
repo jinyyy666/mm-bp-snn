@@ -65,6 +65,7 @@ public:
     virtual void getDeltaVth() = 0;
     virtual void updateVth() = 0;
     virtual void setPredict(int * p) = 0;
+    virtual void setSampleWeight(float* s_weights) = 0;
 	int inputDim;
 	int outputDim;
     int endTime;

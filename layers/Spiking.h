@@ -17,6 +17,7 @@ public:
 		delete outputs;
         delete curDelta;
         delete fireCount;
+        delete weightSqSum;
         delete maxCount;
         delete groundTruth;
 	}
@@ -75,6 +76,10 @@ public:
     void setPredict(int* p){
         predict = p;
     }
+    
+    void setSampleWeight(float* s_weights){
+        sample_weights = s_weights;
+    }
 
 	virtual void printParameter(){
 		char logStr[1024];
@@ -112,17 +117,24 @@ private:
     cuMatrix<float>* groundTruth;
     cuMatrix<int>*   preFireCount;
 
+    cuMatrix<float>* weightSqSum;
+    cuMatrix<float>* lateralFactor;
+
     cuMatrix<float>* vth;
     cuMatrix<float>* vthDelta;
     cuMatrix<float>* vthDeltaTmp;
 
     int * predict;
+    float * sample_weights;
 	int batch;
     int T_REFRAC;
     float threshold;
     float TAU_M;
     float TAU_S;
 	float lambda;
+    float beta;
+    float weightLimit;
+    float lateralW;
     float UNDESIRED_LEVEL;
     float DESIRED_LEVEL;
     float MARGIN;

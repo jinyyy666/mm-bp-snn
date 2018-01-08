@@ -396,7 +396,6 @@ void Config:: get_layers_config(string &str){
             int num_classes = get_word_int(layers[i], "NUM_CLASSES");
 
             int num_neurons = get_word_int(layers[i], "NUM_NEURONS");
-            float wd = get_word_float(layers[i], "WEIGHT_DECAY");
             float vth = get_word_float(layers[i], "VTH");
             int t_ref = get_word_int(layers[i], "T_REFRAC");
             float tau_m = get_word_float(layers[i], "TAU_M");
@@ -424,7 +423,7 @@ void Config:: get_layers_config(string &str){
             bool has_bias = get_word_bool(layers[i], "ADD_BIAS");
             string df = get_word_type(layers[i], "BIAS_FREQ");
             int dummy_freq = df == string("NULL") ? 100000 : atoi(df.c_str());
-            layer = new ConfigSpiking(name, type, input, num_classes, num_neurons, wd, 
+            layer = new ConfigSpiking(name, type, input, num_classes, num_neurons,
                          vth, t_ref, tau_m, tau_s, 
                          initW, weight_connect, initType, weight_path,
                          lweight_path, laterial_type, reservoir_dim, local_inb_strength,
@@ -434,7 +433,6 @@ void Config:: get_layers_config(string &str){
             sprintf(logStr, "\n\n********Spiking Layer********\n");LOG(logStr, "Result/log.txt");
             sprintf(logStr, "NAME                    : %s\n", name.c_str());LOG(logStr, "Result/log.txt");
             sprintf(logStr, "INPUT                   : %s\n", input.c_str());LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "WEIGHT_DECAY            : %f\n", wd);LOG(logStr, "Result/log.txt");
             sprintf(logStr, "VTH                     : %f\n", vth);LOG(logStr, "Result/log.txt");
             sprintf(logStr, "T_REFRAC                : %d\n", t_ref);LOG(logStr, "Result/log.txt");
             sprintf(logStr, "TAU_M                   : %f\n", tau_m);LOG(logStr, "Result/log.txt");
@@ -522,6 +520,20 @@ void Config::init(std::string path)
     bool has_boost_weight = get_word_bool(m_configStr, "BOOST_METHOD");
     m_hasBoostWeightTrain = new ConfigBoostWeight(has_boost_weight);
     sprintf(logStr, "Has Boost Weight Train: %d\n", has_boost_weight);
+    LOG(logStr, "Result/log.txt");
+
+    /*weight regularization*/
+    float lambda_reg = get_word_float(m_configStr, "LAMBDA_REG");
+    float beta_reg = get_word_float(m_configStr, "BETA_REG");
+    m_weightReg = new ConfigWeightReg(lambda_reg, beta_reg);
+    sprintf(logStr, "lambda                : %f\n", lambda_reg);
+    sprintf(logStr, "beta                  : %f\n", beta_reg);
+    LOG(logStr, "Result/log.txt");
+
+    /*weight limit*/
+    float weight_limit = get_word_float(m_configStr, "WEIGHT_LIMIT");
+    m_weightLimit = new ConfigWeightLimit(weight_limit);
+    sprintf(logStr, "weight limit          : %f\n", weight_limit);
     LOG(logStr, "Result/log.txt");
 
     /*BATCH_SIZE*/
