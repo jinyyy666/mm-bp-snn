@@ -33,6 +33,18 @@ private:
 };
 
 
+class ConfigEffectRatio
+{
+public:
+    ConfigEffectRatio(bool useEffect)
+    {
+        m_useEffect = useEffect;
+    }
+    bool getValue(){return m_useEffect;}
+private:
+    bool m_useEffect;
+};
+
 class ConfigWeightReg
 {
 public:
@@ -671,6 +683,7 @@ public:
 		delete  m_nonLinearity;
 		delete  m_isGradientChecking;
         delete  m_hasBoostWeightTrain;
+        delete  m_useEffectRatio;
 		delete  m_batchSize;
 		delete  m_channels;
 
@@ -691,6 +704,9 @@ public:
 
     bool hasBoostWeightTrain(){
         return m_hasBoostWeightTrain->getValue();
+    }
+    bool useEffectRatio(){
+        return m_useEffectRatio->getValue();
     }
     float getLambda(){
         return m_weightReg->getLambda();
@@ -833,6 +849,7 @@ private:
 	ConfigNonLinearity       *m_nonLinearity;
 	ConfigGradient           *m_isGradientChecking;
     ConfigBoostWeight        *m_hasBoostWeightTrain;
+    ConfigEffectRatio        *m_useEffectRatio;
     ConfigWeightReg          *m_weightReg;
     ConfigWeightLimit        *m_weightLimit;
 	ConfigBatchSize          *m_batchSize;

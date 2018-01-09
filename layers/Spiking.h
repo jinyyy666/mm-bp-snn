@@ -17,7 +17,10 @@ public:
 		delete outputs;
         delete curDelta;
         delete fireCount;
+        delete accEffect;
         delete weightSqSum;
+        delete lateralFactor;
+        delete effectRatio;
         delete maxCount;
         delete groundTruth;
 	}
@@ -116,9 +119,11 @@ private:
     cuMatrix<int>*   maxCount;
     cuMatrix<float>* groundTruth;
     cuMatrix<int>*   preFireCount;
+    cuMatrix<float>* accEffect;
 
     cuMatrix<float>* weightSqSum;
     cuMatrix<float>* lateralFactor;
+    cuMatrix<float>* effectRatio;
 
     cuMatrix<float>* vth;
     cuMatrix<float>* vthDelta;

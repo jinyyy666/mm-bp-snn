@@ -522,6 +522,12 @@ void Config::init(std::string path)
     sprintf(logStr, "Has Boost Weight Train: %d\n", has_boost_weight);
     LOG(logStr, "Result/log.txt");
 
+    /*EFFECT RATIO*/
+    bool use_effect_ratio = get_word_bool(m_configStr, "EFFECT_RATIO");
+    m_useEffectRatio = new ConfigEffectRatio(use_effect_ratio);
+    sprintf(logStr, "Use Effect Ratio      : %d\n", use_effect_ratio);
+    LOG(logStr, "Result/log.txt");
+
     /*weight regularization*/
     float lambda_reg = get_word_float(m_configStr, "LAMBDA_REG");
     float beta_reg = get_word_float(m_configStr, "BETA_REG");

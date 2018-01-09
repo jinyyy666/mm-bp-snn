@@ -178,19 +178,14 @@ __global__ void g_Spiking_wgrad(
  * dim3 thread= min(1024, outputDim);
  */
 __global__ void g_Spiking_wgrad_spiketime(
-        int* inputs_time,
-        int* outputs_time,
-        int* batchPreFireCount,
-        int* batchFireCount,
+        float* batchAccEffect,
         float* curDelta,
-        float** wgradTmp,
         float* latFactors,
+        float** wgradTmp,
         int inputDim,
-        int outputDim,
-        int endTime,
-        int T_REFRAC,
-        float TAU_M,
-        float TAU_S);
+        int outputDim);
+
+
 /*
  * dim3 block = dim3(outputDim);
  * dim3 thread= dim3(batch);
@@ -223,6 +218,26 @@ __global__ void g_Spiking_gradAdd(
     float limit,
     int inputDim,
 	int wArea);
+
+
+/*
+ * dim3 block = dim3(batch, inputDim, outputAmount);
+ * dim3 thread= min(1024, outputDim);
+ */
+__global__ void g_Spiking_synaptic_effect(
+        int* inputs_time,
+        int* outputs_time,
+        int* batchPreFireCount,
+        int* batchFireCount,
+        float* w,
+        float* batchAccEffect,
+        float* effectRatio,
+        int inputDim,
+        int outputDim,
+        int endTime,
+        int T_REFRAC,
+        float TAU_M,
+        float TAU_S);
 
 
 /*
@@ -259,6 +274,19 @@ __global__ void g_Spiking_vecAdd(
     int lenw, 
     float momentum, 
     float lr);
+
+/*
+ * dim3 block = dim3(batch, inputDim);
+ * dim3 thread= min(1024, outputDim);
+ */
+__global__ void g_Spiking_debug_spiketime(
+    int* inputs_time,
+    int* outputs_time,
+    int* batchPreFireCount,
+    int* batchFireCount,
+    int inputDim,
+    int outputDim,
+    int endTime);
 
 
 void Spiking::calCost()
@@ -390,14 +418,41 @@ void Spiking::backpropagation()
         checkCudaErrors(cudaStreamSynchronize(0));
         getLastCudaError("Spiking:g_response_2_spiketime");
     }
-    // compute preDelta: curDelta: batch * outputDIm; w: outputDim * inputDim
+    // pre compute the accumulative synaptic effect, and effect ratio (if applicable)
+    dim3 thread = dim3(min(1024, outputDim));
+    dim3 block  = dim3(batch, inputDim);
+    cudaFuncSetCacheConfig(g_Spiking_synaptic_effect, cudaFuncCachePreferL1);
+    g_Spiking_synaptic_effect<<<block, thread>>>(
+        inputs_time->getDev(),
+        outputs_time->getDev(),
+        preFireCount->getDev(),
+        fireCount->getDev(),
+        w[0]->getDev(),
+        accEffect->getDev(),
+        effectRatio == NULL ? NULL : effectRatio->getDev(),
+        inputDim,
+        outputDim,
+        endTime,
+        T_REFRAC,
+        TAU_M,
+        TAU_S);
+
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("g_Spiking_synaptic_effect");
+
+    // compute preDelta: curDelta: batch * outputDim; w: outputDim * inputDim
     assert(w.size() == 1);
     if(preDelta == NULL){
         ConfigSpiking* config = (ConfigSpiking*)Config::instance()->getLayerByName(m_name);
         assert(config->m_input == "data");
     }
     else{
-        matrixMul(curDelta, w[0], preDelta);
+       if(effectRatio != NULL){
+            matrixMul(curDelta, effectRatio, preDelta);
+        }
+        else{
+            matrixMul(curDelta, w[0], preDelta);
+        }
     }    
     // need more code to multi-channel input, simply learn: FullConnect.cu
 }
@@ -505,22 +560,21 @@ void Spiking::getGrad()
     cudaFuncSetCacheConfig(g_Spiking_wgrad_spiketime,cudaFuncCachePreferL1);
 
     g_Spiking_wgrad_spiketime<<<block, thread>>>(
-        inputs_time->getDev(),
-        outputs_time->getDev(),
-        preFireCount->getDev(),
-        fireCount->getDev(),
+        accEffect->getDev(),
         curDelta->getDev(),
-        wgradTmp.m_devPoint,
         lateralFactor == NULL ? NULL : lateralFactor->getDev(),
+        wgradTmp.m_devPoint,
         inputDim,
-        outputDim,
-        endTime,
-        T_REFRAC,
-        TAU_M,
-        TAU_S);
+        outputDim);
 
     checkCudaErrors(cudaStreamSynchronize(0));
 	getLastCudaError("g_Spiking_wgrad_spiketime");
+
+#ifdef DEBUG
+    g_Spiking_debug_spiketime<<<block, thread>>>(inputs_time->getDev(), outputs_time->getDev(), preFireCount->getDev(), fireCount->getDev(), inputDim, outputDim, endTime);
+    checkCudaErrors(cudaStreamSynchronize(0));
+	getLastCudaError("g_Spiking_debug_spiketime");
+#endif
     
     block = dim3(outputDim);
     thread = dim3(min(inputDim, 1024));
@@ -809,6 +863,7 @@ Spiking::Spiking(std::string name)
     fireCount= new cuMatrix<int>(batch, outputDim, outputAmount);
     weightSqSum = new cuMatrix<float>(outputDim, 1, 1);
     maxCount    = new cuMatrix<int>(batch, 1, 1);
+    accEffect   = new cuMatrix<float>(batch, outputDim * inputDim, 1); 
 
     predict = NULL;
 
@@ -859,6 +914,18 @@ Spiking::Spiking(std::string name)
     if(config->hasLaterialInh() == true && config->m_name == std::string("output")){
         lateralFactor = new cuMatrix<float>(batch, outputDim, 1);
         lateralW = config->m_localInbStrength;
+    }
+
+    // use the e^k_{i|j} / o^{k-1}_j for estimating the grad of effect w.r.t to fire count
+    // notice that this variable is w[i][j] * e^k_{i|j} / o^{k-1}_j ! 
+    effectRatio = NULL;
+    if(Config::instance()->useEffectRatio()){
+        if(batch > 1){
+            printf("Must set batch size to 1 if use effect ratio for grad of synaptic effect.\n");
+            printf("Current batch size: %d\n", batch);
+            assert(batch <= 1);
+        }
+        effectRatio = new cuMatrix<float>(outputDim, inputDim, 1);
     }
 
 	for(int i = 0; i < outputAmount; i++){
@@ -1857,35 +1924,22 @@ __global__ void g_Spiking_wgrad(
  * dim3 thread= min(1024, outputDim);
  */
 __global__ void g_Spiking_wgrad_spiketime(
-        int* inputs_time,
-        int* outputs_time,
-        int* batchPreFireCount,
-        int* batchFireCount,
+        float* batchAccEffect,
         float* curDelta,
-        float** wgradTmp,
         float* latFactor,
+        float** wgradTmp,
         int inputDim,
-        int outputDim,
-        int endTime,
-        int T_REFRAC,
-        float TAU_M,
-        float TAU_S)
+        int outputDim)
 {
     int batchId = blockIdx.x;
     int i_idx   = blockIdx.y;
     int ok      = blockIdx.z;
 
     int wSize        = outputDim * inputDim;
-    int inputSize2   = endTime * inputDim;
-    int outputSize2  = endTime * outputDim;
     int curDeltaSize = outputDim;
 
     float* wgrad  = wgradTmp[ok] + batchId * wSize;
-    int* input_time       = inputs_time + batchId * inputSize2;
-    int* output_time      = outputs_time + batchId * outputSize2;
-    int* input_fireCount   = batchPreFireCount + batchId * outputDim;
-    int* output_fireCount = batchFireCount + batchId * outputDim;
-
+    float* acc_effect     = batchAccEffect + batchId * wSize;
     float* cDelta = curDelta + batchId * curDeltaSize;
     float* lFactor = latFactor == NULL ? NULL : latFactor + batchId * curDeltaSize;
 
@@ -1895,21 +1949,11 @@ __global__ void g_Spiking_wgrad_spiketime(
         if(o_idx < outputDim)
         {
             float latFac = lFactor == NULL ? 1.0f : lFactor[o_idx];
-            float delta_w = d_Spiking_gradient_spiketime(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], cDelta[o_idx], o_idx, i_idx, latFac, outputDim, inputDim, endTime, T_REFRAC, TAU_M, TAU_S);
+            float delta_w = cDelta[o_idx] * acc_effect[i_idx + o_idx * inputDim] * latFac;
+
             wgrad[i_idx + o_idx * inputDim] = delta_w;
-#ifdef DEBUG
-            if(i_idx == 154 && o_idx == 56){
-                printf("%d fires: ", i_idx);
-                for(int i = 0; i < input_fireCount[i_idx]; i++)    printf("%d\t", input_time[i_idx * endTime + i]);
-                printf("\n");
-                printf("%d fires: ", o_idx);
-                for(int j = 0; j < output_fireCount[o_idx]; j++)    printf("%d\t", output_time[o_idx * endTime + j]);
-                printf("\n");
-            }
-#endif
         }
     }
-
 }
 
 /*
@@ -1952,3 +1996,94 @@ __global__ void g_Spiking_bgrad_spiketime(
 
 }
 
+
+/*
+ * dim3 block = dim3(batch, inputDim);
+ * dim3 thread= min(1024, outputDim);
+ */
+__global__ void g_Spiking_synaptic_effect(
+        int* inputs_time,
+        int* outputs_time,
+        int* batchPreFireCount,
+        int* batchFireCount,
+        float* w,
+        float* batchAccEffect,
+        float* effectRatio,
+        int inputDim,
+        int outputDim,
+        int endTime,
+        int T_REFRAC,
+        float TAU_M,
+        float TAU_S)
+{
+    int batchId = blockIdx.x;
+    int i_idx   = blockIdx.y;
+
+    int wSize        = outputDim * inputDim;
+    int inputSize2   = endTime * inputDim;
+    int outputSize2  = endTime * outputDim;
+
+    int* input_time       = inputs_time + batchId * inputSize2;
+    int* output_time      = outputs_time + batchId * outputSize2;
+    int* input_fireCount  = batchPreFireCount + batchId * outputDim;
+    int* output_fireCount = batchFireCount + batchId * outputDim;
+    float* acc_effect     = batchAccEffect + batchId * wSize;
+
+    for(int i = 0; i < outputDim; i += blockDim.x)
+    {
+        int o_idx = i + threadIdx.x;
+        if(o_idx < outputDim)
+        {
+            float e = d_Spiking_accumulate_effect(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], o_idx, i_idx, outputDim, inputDim, endTime, T_REFRAC, TAU_M, TAU_S);
+            acc_effect[i_idx + o_idx * inputDim] = e;
+            if(effectRatio != NULL){
+                int o_cnt = output_fireCount[o_idx];
+                int i_cnt = input_fireCount[i_idx];
+                float ratio = i_cnt == 0 || o_cnt == 0 ? 1 : e / float(i_cnt);
+                effectRatio[i_idx + o_idx * inputDim] = ratio * w[i_idx + o_idx * inputDim];
+            }
+        }
+    }
+}
+
+
+/*
+ * dim3 block = dim3(batch, inputDim, outputAmount);
+ * dim3 thread= min(1024, outputDim);
+ */
+__global__ void g_Spiking_debug_spiketime(
+        int* inputs_time,
+        int* outputs_time,
+        int* batchPreFireCount,
+        int* batchFireCount,
+        int inputDim,
+        int outputDim,
+        int endTime)
+{
+    int batchId = blockIdx.x;
+    int i_idx   = blockIdx.y;
+
+    int inputSize2   = endTime * inputDim;
+    int outputSize2  = endTime * outputDim;
+ 
+    int* input_time       = inputs_time + batchId * inputSize2;
+    int* output_time      = outputs_time + batchId * outputSize2;
+    int* input_fireCount  = batchPreFireCount + batchId * outputDim;
+    int* output_fireCount = batchFireCount + batchId * outputDim;
+
+    for(int i = 0; i < outputDim; i += blockDim.x)
+    {
+        int o_idx = i + threadIdx.x;
+        if(o_idx < outputDim)
+        {
+            if(i_idx == 154 && o_idx == 56){
+                printf("%d fires: ", i_idx);
+                for(int i = 0; i < input_fireCount[i_idx]; i++)    printf("%d\t", input_time[i_idx * endTime + i]);
+                printf("\n");
+                printf("%d fires: ", o_idx);
+                for(int j = 0; j < output_fireCount[o_idx]; j++)    printf("%d\t", output_time[o_idx * endTime + j]);
+                printf("\n");
+            }
+        }
+    } 
+}
