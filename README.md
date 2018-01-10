@@ -96,7 +96,6 @@
 
 >Informations
 >------------
->* Author :zhxfl  
->* Mail   :zhxfl@mail.ustc.edu.cn  
+>* Author : Yingyezhe Jin
 >* Welcome for any suggest!!   
 
