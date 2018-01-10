@@ -45,6 +45,15 @@ private:
     bool m_useEffect;
 };
 
+class ConfigOptimizer
+{
+public:
+    ConfigOptimizer(std::string opt_t):m_optType(opt_t){}
+    std::string getType(){return m_optType;}
+private:
+    std::string m_optType;
+};
+
 class ConfigWeightReg
 {
 public:
@@ -684,6 +693,7 @@ public:
 		delete  m_isGradientChecking;
         delete  m_hasBoostWeightTrain;
         delete  m_useEffectRatio;
+        delete  m_optimizer;
 		delete  m_batchSize;
 		delete  m_channels;
 
@@ -717,6 +727,10 @@ public:
     float getWeightLimit(){
         return m_weightLimit->getLimit();
     }
+    std::string getOptimizerType(){
+        return m_optimizer->getType();
+    }
+
 	int getBatchSize(){
 		return m_batchSize->getValue();}
 
@@ -850,6 +864,7 @@ private:
 	ConfigGradient           *m_isGradientChecking;
     ConfigBoostWeight        *m_hasBoostWeightTrain;
     ConfigEffectRatio        *m_useEffectRatio;
+    ConfigOptimizer          *m_optimizer;
     ConfigWeightReg          *m_weightReg;
     ConfigWeightLimit        *m_weightLimit;
 	ConfigBatchSize          *m_batchSize;

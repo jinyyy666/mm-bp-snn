@@ -23,6 +23,8 @@ public:
         delete effectRatio;
         delete maxCount;
         delete groundTruth;
+        delete b1_t;
+        delete b2_t;
 	}
 
 
@@ -129,6 +131,9 @@ private:
     cuMatrix<float>* vthDelta;
     cuMatrix<float>* vthDeltaTmp;
 
+    cuMatrix<float>* b1_t;
+    cuMatrix<float>* b2_t;
+
     int * predict;
     float * sample_weights;
 	int batch;
@@ -153,6 +158,10 @@ private:
     cuMatrixVector<float> bgradTmp;
 	cuMatrixVector<float> momentum_w;
 	cuMatrixVector<float> momentum_b;
+	cuMatrixVector<float> g1_w;
+	cuMatrixVector<float> g1_b;
+	cuMatrixVector<float> g2_w;
+	cuMatrixVector<float> g2_b;
 
     cuMatrixVector<float> w_ref;
     cuMatrixVector<float> w_laterial_ref;

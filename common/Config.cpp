@@ -528,6 +528,13 @@ void Config::init(std::string path)
     sprintf(logStr, "Use Effect Ratio      : %d\n", use_effect_ratio);
     LOG(logStr, "Result/log.txt");
 
+    /*OPTIMIZER*/
+    std::string optim_t = get_word_type(m_configStr, "OPTIMIZER");
+    optim_t = optim_t == std::string("NULL") ? std::string("sgd") : optim_t;
+    m_optimizer = new ConfigOptimizer(optim_t);
+    sprintf(logStr, "Use Optimizer         : %s\n", optim_t.c_str());
+    LOG(logStr, "Result/log.txt");
+
     /*weight regularization*/
     float lambda_reg = get_word_float(m_configStr, "LAMBDA_REG");
     float beta_reg = get_word_float(m_configStr, "BETA_REG");

@@ -267,13 +267,28 @@ __global__ void g_Spiking_feedforward(
  * block  = dim3(outputAmount)
  * thread = dim3(min(256, w[0]->getLen()))
  */
-__global__ void g_Spiking_vecAdd(
-    float* v_m, 
-    float* wgrad, 
-    float* w, 
+__global__ void g_Spiking_sgd_vecAdd(
+    float** v_m, 
+    float** wgrad, 
+    float** w, 
     int lenw, 
     float momentum, 
     float lr);
+
+/*
+ * block  = dim3(outputAmount)
+ * thread = dim3(min(256, w[0]->getLen()))
+ */
+__global__ void g_Spiking_adam_vecAdd(
+    float** g1_ws, 
+    float** g2_ws, 
+    float*  b1_t,
+    float*  b2_t,
+    float** _wgrad,
+    float** _w,
+    int lenw, 
+    float lr);
+
 
 /*
  * dim3 block = dim3(batch, inputDim);
@@ -651,7 +666,45 @@ void Spiking::getGrad()
  * block  = dim3(outputAmount)
  * thread = dim3(min(256, w[0]->getLen()))
  */
-__global__ void g_Spiking_vecAdd(float** momentum_w, float** _wgrad, float** _w, int lenw, float momentum, float lr)
+__global__ void g_Spiking_adam_vecAdd(float** g1_ws, float** g2_ws, float* b1_t, float* b2_t, float** _wgrad, float** _w, int lenw, float lr)
+{
+    int ok = blockIdx.x;
+    float* g1_w  = g1_ws[ok];
+    float* g2_w  = g2_ws[ok];
+    float* w     = _w[ok];
+    float* wgrad = _wgrad[ok];
+    int idx = threadIdx.x;
+    float b1t = b1_t[0];
+    float b2t = b2_t[0];
+    const float b1 = 0.9f;
+    const float b2 = 0.999f;
+    const float eps = 1.e-8f;
+    __syncthreads();
+
+    for(int i = 0; i < lenw; i += blockDim.x * gridDim.x)
+    {
+        int id = i + idx;
+        if(id < lenw)
+        {
+            float weight_grad = wgrad[id];
+            float g1 = b1 * g1_w[id] + (1 - b1) * weight_grad;
+            float g2 = b2 * g2_w[id] + (1 - b2) * weight_grad * weight_grad;
+            w[id]  -= lr * (g1/(1.f - b1t)) / ((float)sqrtf(g2/(1. - b2t)) + eps);
+            g1_w[id] = g1;
+            g2_w[id] = g2;
+        }
+    }
+    if(threadIdx.x == 0){
+        b1_t[0] = b1t * b1;
+        b2_t[0] = b2t * b2;
+    }
+}
+
+/*
+ * block  = dim3(outputAmount)
+ * thread = dim3(min(256, w[0]->getLen()))
+ */
+__global__ void g_Spiking_sgd_vecAdd(float** momentum_w, float** _wgrad, float** _w, int lenw, float momentum, float lr)
 {
     int ok = blockIdx.x;
     float* v_w   = momentum_w[ok];
@@ -674,25 +727,38 @@ void Spiking::updateWeight()
 {
 	dim3 block  = outputAmount;
 	dim3 thread = min(256, w[0]->getLen());
-	g_Spiking_vecAdd<<<block, thread, 0, Layers::instance()->get_stream()>>>(
-        momentum_w.m_devPoint,
-        wgrad.m_devPoint, 
-        w.m_devPoint,
-        w[0]->getLen(), 
-		Config::instance()->getMomentum(),
-		Config::instance()->getLrate());
-
-    ConfigSpiking * config = (ConfigSpiking*) Config::instance()->getLayerByName(m_name); 
-    if(config->hasBias()){
-        block = outputAmount;
-        thread = min(256, b[0]->getLen());
-        g_Spiking_vecAdd<<<block, thread, 0, Layers::instance()->get_stream()>>>(
-            momentum_b.m_devPoint,
-            bgrad.m_devPoint,
-            b.m_devPoint,
-            b[0]->getLen(),
+    if(Config::instance()->getOptimizerType() == std::string("adam")){
+        g_Spiking_adam_vecAdd<<<block, thread, 0, Layers::instance()->get_stream()>>>(
+            g1_w.m_devPoint,
+            g2_w.m_devPoint,
+            b1_t->getDev(),
+            b2_t->getDev(),
+            wgrad.m_devPoint,
+            w.m_devPoint,
+            w[0]->getLen(),
+            Config::instance()->getLrate());
+    } 
+    else{
+        g_Spiking_sgd_vecAdd<<<block, thread, 0, Layers::instance()->get_stream()>>>(
+            momentum_w.m_devPoint,
+            wgrad.m_devPoint, 
+            w.m_devPoint,
+            w[0]->getLen(), 
             Config::instance()->getMomentum(),
-    		Config::instance()->getLrate());
+            Config::instance()->getLrate());
+
+        ConfigSpiking * config = (ConfigSpiking*) Config::instance()->getLayerByName(m_name); 
+        if(config->hasBias()){
+            block = outputAmount;
+            thread = min(256, b[0]->getLen());
+            g_Spiking_sgd_vecAdd<<<block, thread, 0, Layers::instance()->get_stream()>>>(
+                momentum_b.m_devPoint,
+                bgrad.m_devPoint,
+                b.m_devPoint,
+                b[0]->getLen(),
+                Config::instance()->getMomentum(),
+                Config::instance()->getLrate());
+        }
     }
 }
 
@@ -931,9 +997,26 @@ Spiking::Spiking(std::string name)
 	for(int i = 0; i < outputAmount; i++){
 		momentum_w.push_back(new cuMatrix<float>(outputDim, inputDim, 1));
 		momentum_b.push_back(new cuMatrix<float>(outputDim, 1, 1));
+        g1_w.push_back(new cuMatrix<float>(outputDim, inputDim, 1)); // for adam
+        g1_b.push_back(new cuMatrix<float>(outputDim, 1, 1));
+        g2_w.push_back(new cuMatrix<float>(outputDim, inputDim, 1));
+        g2_b.push_back(new cuMatrix<float>(outputDim, 1, 1));       
 	}
 	momentum_w.toGpu();
 	momentum_b.toGpu();
+    g1_w.toGpu();
+    g1_b.toGpu();
+    g2_w.toGpu();
+    g2_b.toGpu();
+
+    b1_t = new cuMatrix<float>(1, 1, 1);
+    b2_t = new cuMatrix<float>(1, 1, 1);
+    for(int i = 0; i < b1_t->getLen(); i++){
+        b1_t->getHost()[i] = 0.9f;
+        b2_t->getHost()[i] = 0.999f;
+    }
+    b1_t->toGpu();
+    b2_t->toGpu();
 
 	this->initRandom();
 
