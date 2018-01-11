@@ -544,7 +544,8 @@ void Config::init(std::string path)
     LOG(logStr, "Result/log.txt");
 
     /*weight limit*/
-    float weight_limit = get_word_float(m_configStr, "WEIGHT_LIMIT");
+    std::string wl = get_word_type(m_configStr, "WEIGHT_LIMIT");
+    float weight_limit = wl == std::string("NULL") ? 8.0f : atof(wl.c_str());
     m_weightLimit = new ConfigWeightLimit(weight_limit);
     sprintf(logStr, "weight limit          : %f\n", weight_limit);
     LOG(logStr, "Result/log.txt");

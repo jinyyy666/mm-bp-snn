@@ -1861,7 +1861,7 @@ __global__ void g_modifySpikes(bool* outputs, int* y, int* fireCount, int target
             if(fireCount[o_idx + batchId * outputDim] == 0)
             {
                 int count = 0;
-                int interval = (mCnt == 0 || target != o_idx) ? endTime/4 : endTime / mCnt;
+                int interval = (mCnt == 0 || target != o_idx) ? endTime - 1 : endTime / mCnt;
                 for(int t = interval; t < endTime; t += interval)
                 {
                     outputSpikes[o_idx + t * outputDim] = true;
