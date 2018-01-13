@@ -1171,7 +1171,7 @@ void Spiking::initRandom()
         for(int i = 0; i < (int)w.size(); i++){
             for(int j = 0; j < w[i]->getLen(); j++){
                 w[i]->getHost()[j] =  initW * (2.0f * rand() / RAND_MAX - 1.0f);
-                //printf("%f ", w[i]->hostData[j]);
+                //printf("%f ", w[i]->getHost()[j]);
             }//printf("\n");
             w[i]->toGpu();
         }

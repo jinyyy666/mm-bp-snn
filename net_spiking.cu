@@ -358,10 +358,12 @@ void __global__ g_boostWeightUpdate(float* weights, bool* predictions, int* y, i
             float stage = error_weighted[cls]/20.0f;
             float new_w = w * __expf(stage * (!prediction));
             weights[idx] = new_w;
+            /*
             if(prediction)
                 printf("Sample: %d predicts correctly old sample weight: %f new sample weight %f\n", cls, w, new_w);
             else 
                 printf("Sample: %d predicts incorrectly old sample weight: %f new sample weight %f\n", cls, w, new_w);
+            */
         }
     }
 }
@@ -469,7 +471,7 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
     sprintf(logStr, "===================output fire counts================\n");
     LOG(logStr, "Result/log.txt");
     y->toCpu();
-    printf("First train sample has label: %d\n", y->get(0, 0, 0));
+    printf("The last test sample has label: %d\n", testY->get(testY.size() - batch, 0, 0));
     for(int i = 0; i < (int)spiking_que.size(); i++){
         SpikingLayerBase* layer = (SpikingLayerBase*) Layers::instance()->get(spiking_que[i]->m_name);
         layer->printFireCount();
@@ -504,7 +506,7 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
 
         Config::instance()->setTraining(true);
 
-        //x.shuffle(5000, y, cuSampleWeight);
+        x.shuffle(5000, y, cuSampleWeight);
 
         DataLayerSpiking *dl = static_cast<DataLayerSpiking*>(Layers::instance()->get("data"));
         dl->getBatchSpikesWithStreams(x, 0);
@@ -534,12 +536,6 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
                 k * batch - start);
             cost += getSpikingCost();
             printf("\b\b\b\b\b\b\b\b\b");
-            for(int ii = 0; ii < (int)spiking_que.size(); ii++){ 
-                if(spiking_que[ii]->m_name == std::string("output") ){
-                    SpikingLayerBase* layer = (SpikingLayerBase*) Layers::instance()->get(spiking_que[ii]->m_name); 
-                    layer->printFireCount();
-                }
-            }
         }
         cost /= (float)x.size();
 

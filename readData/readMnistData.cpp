@@ -203,15 +203,15 @@ void generatePoissonSpikes(
     std::uniform_real_distribution<> dist(0, 1);
     for(int i = 0; i < data.size(); ++i){
         std::vector<std::vector<int> > * sp_time = new std::vector<std::vector<int> >(input_neurons, std::vector<int>());
-        int index = 0;
+        int index = -1;
         for(int j = 0; j < data[i].size(); ++j){
             for(int k = 0; k < data[i][j].size(); ++k){
                 float freq = data[i][j][k];
+                index++;
                 if(fabsf(freq - 0.0f) < 1e-5)   continue;
                 for(int time = 1; time < end_time; ++time){
-                    if(dist(e2) < freq)    (*sp_time)[index].push_back(time);
+                    if(dist(e2) < freq) (*sp_time)[index].push_back(time);
                 }
-                index++;
             }
         }
         cuMatrix<bool>* tpmat = new cuMatrix<bool>(end_time, input_neurons, 1, sp_time);
