@@ -471,7 +471,7 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
     sprintf(logStr, "===================output fire counts================\n");
     LOG(logStr, "Result/log.txt");
     y->toCpu();
-    printf("The last test sample has label: %d\n", testY->get(testY.size() - batch, 0, 0));
+    printf("The last test sample has label: %d\n", testY->get(testY->getLen() - batch, 0, 0));
     for(int i = 0; i < (int)spiking_que.size(); i++){
         SpikingLayerBase* layer = (SpikingLayerBase*) Layers::instance()->get(spiking_que[i]->m_name);
         layer->printFireCount();
