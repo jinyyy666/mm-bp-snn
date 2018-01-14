@@ -26,7 +26,8 @@
 #include "layers/Pooling.h"
 
 //#define VERIFY
-//#define VERIFY_DYNAMICVTH
+//#define VERIFY_RESERVOIR
+//#define SOFTMAX_SPIKING
 
 void runMnist();
 void runCifar10();
@@ -43,6 +44,7 @@ std::vector<int> g_argv;
 
 int main (int argc, char** argv)
 {
+    //cudaDeviceReset();
     cudaSetDevice(0);
 #ifdef linux
     signal(SIGSEGV, handler);   // install our handler
@@ -53,13 +55,15 @@ int main (int argc, char** argv)
 		g_argv.push_back(atoi(argv[2]));
 	}
 	printf("1. MNIST\n2. CIFAR-10\n3. CHINESE\n4. CIFAR-100\n5. VOTE MNIST\n6. NMnist\n7. Spiking Mnist\n8. Spoken English Letter\nChoose the dataSet to run:");
-	int cmd;
+	int cmd = 7;
+    /*
 	if(g_argv.size() >= 2)
 		cmd = g_argv[0];
 	else 
 		if(1 != scanf("%d", &cmd)){
             LOG("scanf fail", "result/log.txt");
         }
+    */
 	if(cmd == 1)
 		runMnist();
 	else if(cmd == 2)
@@ -141,7 +145,7 @@ void runChinese() {
 	end = clock();
 
 	char logStr[1024];
-	sprintf(logStr, "trainning time hours = %f\n", 
+	sprintf(logStr, "training time hours = %f\n", 
 		(end - start) / CLOCKS_PER_SEC / 3600);
 	LOG(logStr, "Result/log.txt");
 }
@@ -213,7 +217,7 @@ void runCifar100(){
 	cuTrainNetwork(trainX, trainY, testX, testY, batch, ImgSize - crop, nclasses, nlrate, nMomentum, epoCount, handle);
 	end = clock();
 	char logStr[1024];
-	sprintf(logStr, "trainning time hours = %f\n", 
+	sprintf(logStr, "training time hours = %f\n", 
 		(end - start) / CLOCKS_PER_SEC / 3600);
 	LOG(logStr, "Result/log.txt");
 }
@@ -285,7 +289,7 @@ void runCifar10()
 	end = clock();
 
 	char logStr[1024];
-	sprintf(logStr, "trainning time hours = %f\n", 
+	sprintf(logStr, "training time hours = %f\n", 
 		(end - start) / CLOCKS_PER_SEC / 3600);
 	LOG(logStr, "Result/log.txt");
 }
@@ -365,7 +369,7 @@ void runMnist(){
 	end = clock();
 
 	char logStr[1024];
-	sprintf(logStr, "trainning time hours = %f\n", 
+	sprintf(logStr, "training time hours = %f\n", 
 		(end - start) / CLOCKS_PER_SEC / 3600);
 	LOG(logStr, "Result/log.txt");
 }
@@ -385,9 +389,11 @@ void runNMnist(){
     //* initialize the configuration
 	Config * config = Config::instance();
 #if   defined(VERIFY)
-    config->initPath("Config/NMnistConfig_test_bias.txt");
-#elif defined(VERIFY_DYNAMICVTH)
-    config->initPath("Config/NMnistConfig_test_dynamicvth.txt");
+    config->initPath("Config/NMnistConfig_test_complete.txt");
+#elif defined(VERIFY_RESERVOIR)
+    config->initPath("Config/NMnistConfig_test_reservoir.txt");
+#elif defined(SOFTMAX_SPIKING)
+    config->initPath("Config/NMnistConfig_softmax.txt");
 #else
     config->initPath("Config/NMnistConfig.txt");
 #endif
@@ -395,10 +401,10 @@ void runNMnist(){
     ConfigDataSpiking * ds_config = (ConfigDataSpiking*)config->getLayerByName("data");
     int input_neurons = ds_config->m_inputNeurons;
     int end_time = config->getEndTime();
-    int train_samples = config->getTrainSamples();
-    int test_samples = config->getTestSamples();
- 	readNMnistData(trainX, trainY, config->getTrainPath(), train_samples, input_neurons, end_time);
- 	readNMnistData(testX , testY, config->getTestPath(), test_samples, input_neurons, end_time);
+    int train_per_class = config->getTrainPerClass();
+    int test_per_class = config->getTestPerClass();
+ 	readNMnistData(trainX, trainY, config->getTrainPath(), train_per_class, input_neurons, end_time);
+ 	readNMnistData(testX , testY, config->getTestPath(), test_per_class, input_neurons, end_time);
 
 	MemoryMonitor::instance()->printCpuMemory();
 	MemoryMonitor::instance()->printGpuMemory();
@@ -410,6 +416,7 @@ void runNMnist(){
 	float start,end;
     
 	int cmd;
+    /*
 	printf("1. random init weight\n2. Read weight from the checkpoint\nChoose the way to init weight:");
 
 	if(g_argv.size() >= 2)
@@ -418,26 +425,25 @@ void runNMnist(){
 		if(1 != scanf("%d", &cmd)){
             LOG("scanf fail", "result/log.txt");
         }
-    
+    */
 	buildSpikingNetwork(trainX.size(), testX.size());
 
     
-	if(cmd == 2)
-		cuReadSpikingNet("Result/checkPoint.txt");
+	//if(cmd == 2)
+		//cuReadSpikingNet("Result/checkPoint.txt");
     
 
 	//* learning rate
 	std::vector<float> nlrate;
 	std::vector<float> nMomentum;
 	std::vector<int> epoCount;
-#ifdef VERIFY
+#if defined(VERIFY) || defined(VERIFY_RESERVOIR)
 	nlrate.push_back(0.00001f);   nMomentum.push_back(0.00f);  epoCount.push_back(1);
 #else
-	nlrate.push_back(0.00001f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
-    nlrate.push_back(0.000009f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
-	nlrate.push_back(0.000008f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
-	nlrate.push_back(0.000007f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
-	nlrate.push_back(0.000006f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
+    int epochs = Config::instance()->getTestEpoch();
+    for(int i = 0; i < epochs; ++i){
+        nlrate.push_back(0.001f/sqrt(i+1)); nMomentum.push_back(0.90f);  epoCount.push_back(1);
+    }
 #endif
 
 	start = clock();
@@ -445,7 +451,7 @@ void runNMnist(){
 	end = clock();
 
 	char logStr[1024];
-	sprintf(logStr, "trainning time hours = %f\n", 
+	sprintf(logStr, "training time hours = %f\n", 
 		(end - start) / CLOCKS_PER_SEC / 3600);
 	LOG(logStr, "Result/log.txt");
 }
@@ -486,7 +492,8 @@ void runSpikingMnist(){
     readSpeechLabel(my_label, testY);
 #else
  	readSpikingMnistData(trainX, trainY, "mnist/train-images-idx3-ubyte", "mnist/train-labels-idx1-ubyte", train_samples, input_neurons, end_time);
- 	readSpikingMnistData(testX , testY, "mnist/train-images-idx3-ubyte", "mnist/train-labels-idx1-ubyte",  test_samples, input_neurons, end_time);
+ 	readSpikingMnistData(testX , testY, "mnist/t10k-images-idx3-ubyte", "mnist/t10k-labels-idx1-ubyte",  test_samples, input_neurons, end_time);
+
 #endif
 	MemoryMonitor::instance()->printCpuMemory();
 	MemoryMonitor::instance()->printGpuMemory();
@@ -522,11 +529,10 @@ void runSpikingMnist(){
 #ifdef VERIFY
 	nlrate.push_back(0.00001f);   nMomentum.push_back(0.00f);  epoCount.push_back(1);
 #else
-	nlrate.push_back(0.00001f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
-    nlrate.push_back(0.000009f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
-	nlrate.push_back(0.000008f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
-	nlrate.push_back(0.000007f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
-	nlrate.push_back(0.000006f);   nMomentum.push_back(0.90f);  epoCount.push_back(20);
+    int epochs = Config::instance()->getTestEpoch();
+    for(int i = 0; i < epochs; ++i){
+        nlrate.push_back(0.001f/sqrt(i+1)); nMomentum.push_back(0.90f);  epoCount.push_back(1);
+    }
 #endif
 
 	start = clock();
@@ -534,7 +540,7 @@ void runSpikingMnist(){
 	end = clock();
 
 	char logStr[1024];
-	sprintf(logStr, "trainning time hours = %f\n", 
+	sprintf(logStr, "training time hours = %f\n", 
 		(end - start) / CLOCKS_PER_SEC / 3600);
 	LOG(logStr, "Result/log.txt");
 }
@@ -557,8 +563,6 @@ void runSpeech(){
 	Config * config = Config::instance();
 #if   defined(VERIFY)
     config->initPath("Config/SpokenLetterConfig_test.txt");
-#elif defined(VERIFY_DYNAMICVTH)
-    config->initPath("Config/SpokenLetterConfig_test_dynamicvth.txt");
 #else
     config->initPath("Config/SpokenLetterConfig.txt");
 #endif
@@ -593,7 +597,7 @@ void runSpeech(){
 
     /*
 	if(cmd == 2)
-		cuReadSpikingNet("Result/checkPoint.txt");
+	    cuReadSpikingNet("Result/checkPoint.txt");
     */
 
 	//* learning rate
@@ -611,7 +615,7 @@ void runSpeech(){
 	end = clock();
 
 	char logStr[1024];
-	sprintf(logStr, "trainning time hours = %f\n", 
+	sprintf(logStr, "training time hours = %f\n", 
 		(end - start) / CLOCKS_PER_SEC / 3600);
 	LOG(logStr, "Result/log.txt");
 }
