@@ -492,7 +492,7 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
     float lrate = 0.05f;
     float Momentum = 0.9f;
     int id = 0;
-    cudaProfilerStart();
+    //cudaProfilerStart();
     for (int epo = 0; epo < epochs; epo++) {
         if (id >= (int)nlrate.size())
             break;
@@ -611,6 +611,6 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
             MemoryMonitor::instance()->printGpuMemory();
         }
     }
-    cudaProfilerStop();
+    //cudaProfilerStop();
 }
 

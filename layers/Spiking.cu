@@ -341,6 +341,7 @@ void Spiking::feedforward()
 
     ConfigSpiking * config = (ConfigSpiking*) Config::instance()->getLayerByName(m_name); 
     int dummyFreq = config->getBiasFreq();
+
     g_Spiking_feedforward<<<block, thread>>>(
             inputs->getDev(),
             w.m_devPoint,
@@ -1553,8 +1554,8 @@ __device__ float d_Spiking_accumulate_effect(
             if(pre_time > t_post)   continue;
             int s = t_post - t_post_last;
             int t = t_post - pre_time;
-            float factor = exp(-1*max(t - s, 0)/TAU_S)/(1 - TAU_S/TAU_M);
-            sum += factor * (exp(-1*min(s, t)/TAU_M) - exp(-1*min(s, t)/TAU_S));
+            float factor = __expf(-1*max(t - s, 0)/TAU_S)/(1 - TAU_S/TAU_M);
+            sum += factor * (__expf(-1*min(s, t)/TAU_M) - __expf(-1*min(s, t)/TAU_S));
         }
         t_post_last = t_post + T_REFRAC;
         acc_response += sum;
