@@ -25,7 +25,7 @@
 #include "common/track.h"
 #include "layers/Pooling.h"
 
-//#define VERIFY
+#define VERIFY
 //#define VERIFY_RESERVOIR
 //#define SOFTMAX_SPIKING
 
@@ -55,7 +55,7 @@ int main (int argc, char** argv)
 		g_argv.push_back(atoi(argv[2]));
 	}
 	printf("1. MNIST\n2. CIFAR-10\n3. CHINESE\n4. CIFAR-100\n5. VOTE MNIST\n6. NMnist\n7. Spiking Mnist\n8. Spoken English Letter\nChoose the dataSet to run:");
-	int cmd = 7;
+	int cmd = 6;
     /*
 	if(g_argv.size() >= 2)
 		cmd = g_argv[0];
