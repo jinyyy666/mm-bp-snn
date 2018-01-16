@@ -8,7 +8,7 @@ EFFECT_RATIO = true;            #use e^k_{i|j}/o^{k-1}_j for estimate the grad o
 OPTIMIZER = adam;                # use adam as the optimizer , by default is sgd with momentum #
 
 SHOWIMAGE = false;              #show the images after transformation#
-TEST_EPOCH = 2;                 #the period to get the test dataset's error rate#
+TEST_EPOCH = 200;                 #the period to get the test dataset's error rate#
 WHITE_NOISE = 0.0;  
 LAMBDA_REG  = 10;               # param for weight regularization #
 BETA_REG    = 0.04;               
