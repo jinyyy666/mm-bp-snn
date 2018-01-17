@@ -5,6 +5,8 @@ SHOWIMAGE = false;              #show the images after transformation#
 TEST_EPOCH = 1;                 #the period to get the test dataset's error rate#
 WHITE_NOISE = 0.0;  
 
+FAST_RESPONSE = true;           # enable the fast input response in the forward pass #
+                                # need to set batch = 1 #
 
 BATCH_SIZE = 1;                
 CHANNELS = 1;                   #1, 3, 4#

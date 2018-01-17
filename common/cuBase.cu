@@ -343,6 +343,25 @@ __global__ void g_convert(float* cuPool, float*cuPoolToFlActi, int batch, int si
 
 
 /*
+* 
+* function: cast cuMatrix<bool>*(batch, inputDim * endTime) to cuMatrix<float>*(endTime, inputDim)
+*           only use this function when batch = 1 !
+* blocks  : dim3(endTime) endTime --> nrows
+* threads : dim3(min(1024, inputDim)) inputDim --> ncols
+*/
+__global__ void g_cast_bool_2_float(bool* inputs, int endTime, int inputDim, float* input_f){
+	int t   = blockIdx.x;
+	for(int i = 0; i < inputDim; i += blockDim.x){
+		int i_idx = i + threadIdx.x;
+		if(i_idx < inputDim){
+            input_f[i_idx + t * inputDim] = inputs[i_idx + t * inputDim] == true ? 1 : 0;
+		}
+	}
+}
+
+
+
+/*
 * function: transform the binary response matrix (batch, outputDim * endTime) to spike times matrix 
 * (batch, outputDim * "num of spikes"), directly store the spike times. 
 * blocks  : dim3(batch)

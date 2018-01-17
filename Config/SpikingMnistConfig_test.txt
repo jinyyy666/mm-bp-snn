@@ -4,6 +4,9 @@ IS_GRADIENT_CHECKING = true;   #is true when debug#
 BOOST_METHOD = true;            #allow boost weight train#
 EFFECT_RATIO = true;            #use e^k_{i|j}/o^{k-1}_j for estimate the grad of syn effect#
                                 #need to set batch = 1 in this case#
+FAST_RESPONSE = false;          # enable the fast input response in the forward pass #
+                                # need to set batch = 1 #
+                                # **might** introduce some numerial inconsistence w.r.t. to the test #                                # if set true, pls set vth = vth - 1e-6 to pass the test #
 
 OPTIMIZER = adam;                # use adam as the optimizer , by default is sgd with momentum #
 SHOWIMAGE = false;              #show the images after transformation#

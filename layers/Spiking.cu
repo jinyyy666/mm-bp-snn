@@ -17,13 +17,15 @@ __device__ float d_Spiking_accumulate_spikes(
     int inputDim,
     int outputDim,
     bool* input,
+    float* input_resp,
     bool* output,
     int o_idx,
     float* weights,
     float* weights_lat,
     float* biases,
     int t,
-    int dummyFreq);
+    int dummyFreq, 
+    int endTime);
 
 /*
  * Device func for spike gradient for each pair of binary spike response
@@ -246,6 +248,7 @@ __global__ void g_Spiking_synaptic_effect(
  */
 __global__ void g_Spiking_feedforward(
 	bool*  inputs,
+    float* input_resp,
 	float** ws,
     float** ws_lat,
     float** bs,
@@ -342,8 +345,15 @@ void Spiking::feedforward()
     ConfigSpiking * config = (ConfigSpiking*) Config::instance()->getLayerByName(m_name); 
     int dummyFreq = config->getBiasFreq();
 
+    // fast input response
+    if(input_resp != NULL){
+        g_cast_bool_2_float<<<endTime, min(1024, inputDim)>>>(inputs->getDev(), endTime, inputDim, input_float->getDev());
+        matrixMulTB(w[0], input_float, input_resp);
+    }
+    
     g_Spiking_feedforward<<<block, thread>>>(
             inputs->getDev(),
+            input_resp == NULL ? NULL : input_resp->getDev(),
             w.m_devPoint,
             w_lat_dev,
             b.m_devPoint,
@@ -923,8 +933,21 @@ Spiking::Spiking(std::string name)
     DESIRED_LEVEL   = config->m_desired_level;
     MARGIN          = config->m_margin; 
 
-	outputs  = new cuMatrix<bool>(batch, outputDim * endTime, outputAmount);
+    outputs  = new cuMatrix<bool>(batch, outputDim * endTime, outputAmount);
     outputs_time = new cuMatrix<int>(batch, outputDim * endTime, outputAmount);
+
+    // for fast input response
+    input_resp = NULL;
+    input_float = NULL;
+    if(Config::instance()->fastResponse()){
+        if(batch > 1){
+            printf("Must set batch size to 1 if use fast response.\n");
+            printf("Current batch size: %d\n", batch);
+            assert(batch <= 1);
+        }
+        input_resp = new cuMatrix<float>(outputDim, endTime, 1);
+        input_float = new cuMatrix<float>(endTime, inputDim, 1);
+    }
 
 	curDelta = new cuMatrix<float>(batch, outputDim, outputAmount);
     fireCount= new cuMatrix<int>(batch, outputDim, outputAmount);
@@ -1445,13 +1468,15 @@ __device__ float d_Spiking_accumulate_spikes(
     int inputDim,
     int outputDim,
     bool* input,
+    float* input_response,
     bool* output,
     int o_idx,
     float* weights,
     float* weights_lat,
     float* biases,
     int t,
-    int dummyFreq)
+    int dummyFreq,
+    int endTime)
 {
     int idx = threadIdx.x;
     if(idx >= outputDim * inputDim){
@@ -1459,9 +1484,15 @@ __device__ float d_Spiking_accumulate_spikes(
     }  
     float response = 0.0f;
     // effect from the forward-connects
-    for(int i = 0; i < inputDim; ++i){
-        response += input[i + (t - 1) * inputDim] ? weights[i + o_idx * inputDim] : 0; 
+    if(input_response == NULL){
+        for(int i = 0; i < inputDim; ++i){
+            response += input[i + (t - 1) * inputDim] ? weights[i + o_idx * inputDim] : 0; 
+        }
     }
+    else{
+        response = input_response[(t - 1) + o_idx * endTime];
+    }
+
     // effect from the bias
     if(t % dummyFreq == 0){
         response += biases[idx];
@@ -1472,6 +1503,7 @@ __device__ float d_Spiking_accumulate_spikes(
         for(int i = 0; i < outputDim; ++i)
             response += output[i + (t - 1) * outputDim] ? weights_lat[i + o_idx * outputDim] : 0;
     }
+
     return response;
 }
 
@@ -1881,6 +1913,7 @@ __global__ void g_modifySpikes(bool* outputs, int* y, int* fireCount, int target
  */
 __global__ void g_Spiking_feedforward(
 	bool*  inputs,
+    float* input_resp,
 	float** ws,
 	float** ws_lat,
     float** bs,
@@ -1937,7 +1970,7 @@ __global__ void g_Spiking_feedforward(
 
                 // 2. receive the spike inputs
                 __syncthreads(); // make sure all the threads has generated the spikes for the last time step
-                response = d_Spiking_accumulate_spikes(inputDim, outputDim, curInput, curOutput, o_idx, w, w_l, b, t, dummyFreq);
+                response = d_Spiking_accumulate_spikes(inputDim, outputDim, curInput, input_resp, curOutput, o_idx, w, w_l, b, t, dummyFreq, endTime);
                 
                 // 3. Add up the response to ep (state variable)
                 ep += response;

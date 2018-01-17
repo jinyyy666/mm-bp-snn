@@ -13,7 +13,8 @@ class Spiking: public SpikingLayerBase
 public:
 	Spiking(std::string name);
 	~Spiking(){
-        delete inputs;
+        delete input_resp;
+        delete input_float;
 		delete outputs;
         delete curDelta;
         delete fireCount;
@@ -116,6 +117,8 @@ private:
 	cuMatrix<float>*  curDelta; // size(curDelta) == size(fireCount)
     cuMatrix<int>*    inputs_time;
     cuMatrix<int>*    outputs_time;
+    cuMatrix<float>*  input_resp;
+    cuMatrix<float>*  input_float;
 
     cuMatrix<int>*   fireCount;
     cuMatrix<int>*   maxCount;

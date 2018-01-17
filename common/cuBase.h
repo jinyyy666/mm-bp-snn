@@ -44,6 +44,17 @@ __global__ void g_getCost_1(float* softMaxP,
 */
 __global__ void g_convert(float* cuPool, float*cuPoolToFlActi, int batch, int size, int channel);
 
+
+/*
+* 
+* function: cast cuMatrix<bool>*(batch, inputDim * endTime) to cuMatrix<float>*(endTime, inputDim)
+*           only use this function when batch = 1 !
+* blocks  : dim3(endTime) endTime --> nrows
+* threads : dim3(min(1024, inputDim)) inputDim --> ncols
+*/
+__global__ void g_cast_bool_2_float(bool* inputs, int endTime, int inputDim, float* input_f);
+
+
 /*
 function: g_preDeltaFormat
 threads : <<<dim3(batch), dim3(512)>>> 
