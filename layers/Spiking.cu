@@ -16,7 +16,6 @@
 __device__ float d_Spiking_accumulate_spikes(
     int inputDim,
     int outputDim,
-    bool* input,
     float* input_resp,
     bool* output,
     int o_idx,
@@ -247,8 +246,7 @@ __global__ void g_Spiking_synaptic_effect(
  *	threads: dim3(min(outputDim, 1024), 1);
  */
 __global__ void g_Spiking_feedforward(
-	bool*  inputs,
-    float* input_resp,
+    float* inputs_resp,
 	float** ws,
     float** ws_lat,
     float** bs,
@@ -346,14 +344,12 @@ void Spiking::feedforward()
     int dummyFreq = config->getBiasFreq();
 
     // fast input response
-    if(input_resp != NULL){
-        g_cast_bool_2_float<<<endTime, min(1024, inputDim)>>>(inputs->getDev(), endTime, inputDim, input_float->getDev());
-        matrixMulTB(w[0], input_float, input_resp);
-    }
-    
+    g_cast_bool_2_float<<<dim3(batch, endTime), min(1024, inputDim)>>>(inputs->getDev(), endTime, inputDim, batch, inputs_float->getDev());
+    matrixMul(w[0], inputs_float, inputs_resp_tmp); // input_resp_tmp: outputDim * endTime * batch
+    g_transform_2_batch<<<dim3(batch, outputDim), min(1024, endTime)>>>(inputs_resp_tmp->getDev(), endTime, outputDim, batch, inputs_resp->getDev());
+
     g_Spiking_feedforward<<<block, thread>>>(
-            inputs->getDev(),
-            input_resp == NULL ? NULL : input_resp->getDev(),
+            inputs_resp->getDev(),
             w.m_devPoint,
             w_lat_dev,
             b.m_devPoint,
@@ -937,17 +933,9 @@ Spiking::Spiking(std::string name)
     outputs_time = new cuMatrix<int>(batch, outputDim * endTime, outputAmount);
 
     // for fast input response
-    input_resp = NULL;
-    input_float = NULL;
-    if(Config::instance()->fastResponse()){
-        if(batch > 1){
-            printf("Must set batch size to 1 if use fast response.\n");
-            printf("Current batch size: %d\n", batch);
-            assert(batch <= 1);
-        }
-        input_resp = new cuMatrix<float>(outputDim, endTime, 1);
-        input_float = new cuMatrix<float>(endTime, inputDim, 1);
-    }
+    inputs_resp_tmp = new cuMatrix<float>(outputDim, endTime * batch, 1);
+    inputs_resp = new cuMatrix<float>(batch, outputDim * endTime, 1);
+    inputs_float = new cuMatrix<float>(inputDim, endTime * batch, 1);
 
 	curDelta = new cuMatrix<float>(batch, outputDim, outputAmount);
     fireCount= new cuMatrix<int>(batch, outputDim, outputAmount);
@@ -1467,7 +1455,6 @@ void Spiking::initLocalInhibition(float strength)
 __device__ float d_Spiking_accumulate_spikes(
     int inputDim,
     int outputDim,
-    bool* input,
     float* input_response,
     bool* output,
     int o_idx,
@@ -1484,14 +1471,7 @@ __device__ float d_Spiking_accumulate_spikes(
     }  
     float response = 0.0f;
     // effect from the forward-connects
-    if(input_response == NULL){
-        for(int i = 0; i < inputDim; ++i){
-            response += input[i + (t - 1) * inputDim] ? weights[i + o_idx * inputDim] : 0; 
-        }
-    }
-    else{
-        response = input_response[(t - 1) + o_idx * endTime];
-    }
+    response = input_response[(t - 1) + o_idx * endTime];
 
     // effect from the bias
     if(t % dummyFreq == 0){
@@ -1912,8 +1892,7 @@ __global__ void g_modifySpikes(bool* outputs, int* y, int* fireCount, int target
  * dim3 thread= dim3(min(outputDim, 1024), min(1024/ outputDim, outputAmount)));
  */
 __global__ void g_Spiking_feedforward(
-	bool*  inputs,
-    float* input_resp,
+    float* inputs_resp,
 	float** ws,
 	float** ws_lat,
     float** bs,
@@ -1935,12 +1914,11 @@ __global__ void g_Spiking_feedforward(
 	if(ok >= outputAmount) return;
 
     int outputSize2 = endTime * outputDim;
-	int inputSize2  = endTime* inputDim;
     int outputArea  = endTime * outputDim;
     int inputArea   = endTime * inputDim;
 
 	bool* curOutput    = outputs + ok * outputArea + batchId * outputSize2 * outputAmount;
-    bool* curInput     = inputs + ok * inputArea + batchId * inputSize2 * outputAmount;
+    float* curInput     = inputs_resp + ok * inputArea + batchId * outputSize2 * outputAmount;
     int* curFireCount = fireCount + ok * outputDim + batchId * outputDim * outputAmount; 
     float* w = ws[ok];
     float* w_l = ws_lat == NULL ? NULL : ws_lat[ok];
@@ -1954,7 +1932,7 @@ __global__ void g_Spiking_feedforward(
         {
             float v  = 0.0f;
             float ep = 0.0f;
-            float threshold = vth;
+            float threshold = vth - 1e-6; // migitate the numerical disparity due to fast response
             int t_ref= 0;
             float response = 0.0f;
             int fire_count = 0;
@@ -1970,7 +1948,7 @@ __global__ void g_Spiking_feedforward(
 
                 // 2. receive the spike inputs
                 __syncthreads(); // make sure all the threads has generated the spikes for the last time step
-                response = d_Spiking_accumulate_spikes(inputDim, outputDim, curInput, input_resp, curOutput, o_idx, w, w_l, b, t, dummyFreq, endTime);
+                response = d_Spiking_accumulate_spikes(inputDim, outputDim, curInput, curOutput, o_idx, w, w_l, b, t, dummyFreq, endTime);
                 
                 // 3. Add up the response to ep (state variable)
                 ep += response;

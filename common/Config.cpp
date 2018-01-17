@@ -528,12 +528,6 @@ void Config::init(std::string path)
     sprintf(logStr, "Use Effect Ratio      : %d\n", use_effect_ratio);
     LOG(logStr, "Result/log.txt");
 
-    /*fast response*/
-    bool fast_response = get_word_bool(m_configStr, "FAST_RESPONSE");
-    m_fastResponse = new ConfigFastResponse(fast_response);
-    sprintf(logStr, "fast response         : %d\n", fast_response);
-    LOG(logStr, "Result/log.txt");
-
     /*OPTIMIZER*/
     std::string optim_t = get_word_type(m_configStr, "OPTIMIZER");
     optim_t = optim_t == std::string("NULL") ? std::string("sgd") : optim_t;

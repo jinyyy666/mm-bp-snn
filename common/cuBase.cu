@@ -344,22 +344,42 @@ __global__ void g_convert(float* cuPool, float*cuPoolToFlActi, int batch, int si
 
 /*
 * 
-* function: cast cuMatrix<bool>*(batch, inputDim * endTime) to cuMatrix<float>*(endTime, inputDim)
-*           only use this function when batch = 1 !
-* blocks  : dim3(endTime) endTime --> nrows
-* threads : dim3(min(1024, inputDim)) inputDim --> ncols
+* function: cuMatrix<bool>*(batch, endTime*inputDim) to cuMatrix<float>*(inputDim, endTime*batch)
+* blocks  : dim3(batch, endTime)
+* threads : dim3(min(1024, inputDim))
 */
-__global__ void g_cast_bool_2_float(bool* inputs, int endTime, int inputDim, float* input_f){
-	int t   = blockIdx.x;
+__global__ void g_cast_bool_2_float(bool* inputs, int endTime, int inputDim, int batch, float* inputs_f){
+	int b   = blockIdx.x;
+    int t   = blockIdx.y;
+    int inputSize2 = endTime * inputDim;
+    bool* input = inputs + b * inputSize2;
 	for(int i = 0; i < inputDim; i += blockDim.x){
 		int i_idx = i + threadIdx.x;
 		if(i_idx < inputDim){
-            input_f[i_idx + t * inputDim] = inputs[i_idx + t * inputDim] == true ? 1 : 0;
+            inputs_f[i_idx * endTime * batch + t * batch + b] = input[i_idx + t * inputDim];
 		}
 	}
 }
 
 
+/*
+* 
+* function: cuMatrix<float>*(outputDim, endTime*batch) to cuMatrix<float>*(batch, outputDim*endTime)
+* blocks  : dim3(batch, outputDim)
+* threads : dim3(min(1024, endTime))
+*/
+__global__ void g_transform_2_batch(float* inputs_rt, int endTime, int outputDim, int batch, float* inputs_r){
+	int b     = blockIdx.x;
+    int o_idx = blockIdx.y;
+    int size2 = outputDim * endTime;
+    float* input_r = inputs_r + b * size2;
+	for(int t = 0; t < endTime; t += blockDim.x){
+		int time = t + threadIdx.x;
+		if(time < endTime){
+            input_r[o_idx * endTime + time] = inputs_rt[o_idx * endTime * batch + time * batch + b];
+		}
+	}
+}
 
 /*
 * function: transform the binary response matrix (batch, outputDim * endTime) to spike times matrix 

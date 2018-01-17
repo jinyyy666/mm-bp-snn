@@ -47,13 +47,13 @@ __global__ void g_convert(float* cuPool, float*cuPoolToFlActi, int batch, int si
 
 /*
 * 
-* function: cast cuMatrix<bool>*(batch, inputDim * endTime) to cuMatrix<float>*(endTime, inputDim)
-*           only use this function when batch = 1 !
-* blocks  : dim3(endTime) endTime --> nrows
-* threads : dim3(min(1024, inputDim)) inputDim --> ncols
+* function: cuMatrix<bool>*(batch, endTime*inputDim) to cuMatrix<float>*(inputDim, endTime*batch)
+* blocks  : dim3(batch)
+* threads : dim3(min(1024, inputDim))
 */
-__global__ void g_cast_bool_2_float(bool* inputs, int endTime, int inputDim, float* input_f);
+__global__ void g_cast_bool_2_float(bool* inputs, int endTime, int inputDim, int batch, float* inputs_f);
 
+__global__ void g_transform_2_batch(float* inputs_rt, int endTime, int outputDim, int batch, float* inputs_r);
 
 /*
 function: g_preDeltaFormat

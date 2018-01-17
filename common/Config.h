@@ -45,15 +45,6 @@ private:
     bool m_useEffect;
 };
 
-class ConfigFastResponse
-{
-public:
-    ConfigFastResponse(bool fast_resp):m_fast(fast_resp){}
-    bool getValue(){return m_fast;}
-private:
-    bool m_fast;
-};
-
 class ConfigOptimizer
 {
 public:
@@ -702,7 +693,6 @@ public:
 		delete  m_isGradientChecking;
         delete  m_hasBoostWeightTrain;
         delete  m_useEffectRatio;
-        delete  m_fastResponse;
         delete  m_optimizer;
 		delete  m_batchSize;
 		delete  m_channels;
@@ -736,9 +726,6 @@ public:
     }
     float getWeightLimit(){
         return m_weightLimit->getLimit();
-    }
-    bool fastResponse(){
-        return m_fastResponse->getValue();
     }
     std::string getOptimizerType(){
         return m_optimizer->getType();
@@ -877,7 +864,6 @@ private:
 	ConfigGradient           *m_isGradientChecking;
     ConfigBoostWeight        *m_hasBoostWeightTrain;
     ConfigEffectRatio        *m_useEffectRatio;
-    ConfigFastResponse       *m_fastResponse;
     ConfigOptimizer          *m_optimizer;
     ConfigWeightReg          *m_weightReg;
     ConfigWeightLimit        *m_weightLimit;
