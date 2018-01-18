@@ -540,6 +540,7 @@ void Config::init(std::string path)
     float beta_reg = get_word_float(m_configStr, "BETA_REG");
     m_weightReg = new ConfigWeightReg(lambda_reg, beta_reg);
     sprintf(logStr, "lambda                : %f\n", lambda_reg);
+    LOG(logStr, "Result/log.txt");
     sprintf(logStr, "beta                  : %f\n", beta_reg);
     LOG(logStr, "Result/log.txt");
 
