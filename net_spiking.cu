@@ -470,8 +470,10 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
     float my_end = (float)clock();
     sprintf(logStr, "===================output fire counts================\n");
     LOG(logStr, "Result/log.txt");
-    y->toCpu();
-    printf("The last test sample has label: %d\n", testY->get(testY->getLen() - batch, 0, 0));
+    testY->toCpu();
+    sprintf(logStr, "The last sample label: %d\n", testY->get(testY->getLen() - batch, 0, 0));
+    LOG(logStr, "Result/log.txt");
+
     for(int i = 0; i < (int)spiking_que.size(); i++){
         SpikingLayerBase* layer = (SpikingLayerBase*) Layers::instance()->get(spiking_que[i]->m_name);
         layer->printFireCount();
@@ -599,7 +601,8 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
         sprintf(logStr, "===================output fire counts================\n");
         LOG(logStr, "Result/log.txt");
         testY->toCpu();
-        printf("First test sample has label: %d\n", testY->get(0, 0, 0));
+        sprintf(logStr, "The last sample label: %d\n", testY->get(testY->getLen() - batch, 0, 0));
+        LOG(logStr, "Result/log.txt");
         for(int i = 0; i < (int)spiking_que.size(); i++){
             SpikingLayerBase* layer = (SpikingLayerBase*) Layers::instance()->get(spiking_que[i]->m_name);
             layer->printFireCount();
