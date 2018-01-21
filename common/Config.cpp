@@ -432,6 +432,7 @@ void Config:: get_layers_config(string &str){
             char logStr[256];
             sprintf(logStr, "\n\n********Spiking Layer********\n");LOG(logStr, "Result/log.txt");
             sprintf(logStr, "NAME                    : %s\n", name.c_str());LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "NUM_NEURONS             : %d\n", num_neurons);LOG(logStr, "Result/log.txt");
             sprintf(logStr, "INPUT                   : %s\n", input.c_str());LOG(logStr, "Result/log.txt");
             sprintf(logStr, "VTH                     : %f\n", vth);LOG(logStr, "Result/log.txt");
             sprintf(logStr, "T_REFRAC                : %d\n", t_ref);LOG(logStr, "Result/log.txt");
