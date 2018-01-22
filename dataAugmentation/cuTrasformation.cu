@@ -111,7 +111,7 @@ __global__ void g_getRandomUniform(float* r1, float* r2, int len)
 
 /*
  * blocks  : dim3(batch)
- * threads : dim3(512)
+ * threads : min(1024, ImgSize * ImgSize)
  */
 __global__ void g_generateDistortionMap(
 	float* _dispH,
@@ -309,7 +309,7 @@ __global__ void g_scaleAndRotate(
 
 /*
  * blocks : dim3(batch, Config::instance()->getChannels())
- * threads: dim3(min(512, ImgSize * ImgSize))
+ * threads: dim3(min(1024, ImgSize * ImgSize))
  */
 __global__ void g_applyDistortionMap(
 	float** _inputs,
@@ -352,7 +352,7 @@ __global__ void g_applyDistortionMap(
 			int sRow, sCol, sRowp1, sColp1;
 			bool bSkipOutOfBounds;
 
-			if(fabs(dispV[idx]) < 0.000000001 && fabs(dispH[idx]) < 0.0000000001)
+			if(fabs(dispV[idx]) < 0.000000001 && fabs(dispH[idx]) < 0.000000001)
 			{
 				output[idx] = input[idx];
 				continue;
@@ -430,7 +430,7 @@ void cuApplyRandom(int batch, unsigned long long s, int ImgSize)
 	cudaStreamSynchronize(0);
 	getLastCudaError("g_getRandomUniform");
 
-	int threads = min(512, ImgSize * ImgSize);
+	int threads = min(1024, ImgSize * ImgSize);
 	g_generateDistortionMap<<<dim3(batch),threads>>>(cuDispH->getDev(),
 		cuDispV->getDev(), cu_d_randomNum, cuGaussianKernel->getDev(),
 		Config::instance()->getDistortion(),
@@ -460,7 +460,7 @@ void cuApplyScaleAndRotate(int batch,
 
 void cuApplyDistortion(float**inputs, float**outputs, int batch, int ImgSize)
 {
-	int threadidx = min(ImgSize * ImgSize, 512);
+	int threadidx = min(ImgSize * ImgSize, 1024);
 	g_applyDistortionMap<<<dim3(batch, Config::instance()->getChannels()),
 		dim3(threadidx), sizeof(float) * ImgSize * ImgSize>>>(inputs,
 		outputs, 
