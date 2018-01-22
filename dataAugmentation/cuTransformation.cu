@@ -1,4 +1,4 @@
-#include "cuTrasformation.cuh"
+#include "cuTransformation.cuh"
 #include <math.h>
 #include <stdio.h>
 #include "../common/cuMatrix.h"
@@ -111,7 +111,7 @@ __global__ void g_getRandomUniform(float* r1, float* r2, int len)
 
 /*
  * blocks  : dim3(batch)
- * threads : min(1024, ImgSize * ImgSize)
+ * threads : min(512, ImgSize * ImgSize)
  */
 __global__ void g_generateDistortionMap(
 	float* _dispH,
@@ -430,7 +430,7 @@ void cuApplyRandom(int batch, unsigned long long s, int ImgSize)
 	cudaStreamSynchronize(0);
 	getLastCudaError("g_getRandomUniform");
 
-	int threads = min(1024, ImgSize * ImgSize);
+	int threads = min(512, ImgSize * ImgSize);
 	g_generateDistortionMap<<<dim3(batch),threads>>>(cuDispH->getDev(),
 		cuDispV->getDev(), cu_d_randomNum, cuGaussianKernel->getDev(),
 		Config::instance()->getDistortion(),

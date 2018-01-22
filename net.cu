@@ -4,7 +4,7 @@
 #include <cuda_runtime.h>
 #include "common/util.h"
 #include <time.h>
-#include "dataAugmentation/cuTrasformation.cuh"
+#include "dataAugmentation/cuTransformation.cuh"
 #include "common/Config.h"
 #include "common/cuMatrixVector.h"
 #include <helper_functions.h>

@@ -8,7 +8,7 @@
 #include "../common/Config.h"
 #include "../common/cuBase.h"
 #include "../common/util.h"
-#include "../dataAugmentation/cuTrasformation.cuh"
+#include "../dataAugmentation/cuTransformation.cuh"
 
 
 /*
