@@ -4,6 +4,7 @@
 #include <cuda_profiler_api.h>
 #include "common/util.h"
 #include <time.h>
+#include "dataAugmentation/cuTransformation.cuh"
 #include "common/Config.h"
 #include <helper_functions.h>
 #include <helper_cuda.h>
@@ -389,7 +390,7 @@ void predictTestRate(cuMatrixVector<bool>&x,
     Config::instance()->setTraining(false);
 
     DataLayerSpiking *dl = static_cast<DataLayerSpiking*>(Layers::instance()->get("data"));
-    dl->getBatchSpikesWithStreams(testX, 0);
+    dl->getBatchSpikes(testX, 0);
 
     cuSVote->gpuClear();
     for (int k = 0; k < ((int)testX.size() + batch - 1) / batch; k ++) {
@@ -398,10 +399,10 @@ void predictTestRate(cuMatrixVector<bool>&x,
         printf("test %2d%%", 100 * start / (((int)testX.size() + batch - 1)));
 
         if(start + batch <= (int)testX.size() - batch)
-            dl->getBatchSpikesWithStreams(testX, start + batch);
+            dl->getBatchSpikes(testX, start + batch);
         else{
             int tstart = testX.size() - batch;
-            dl->getBatchSpikesWithStreams(testX, tstart);
+            dl->getBatchSpikes(testX, tstart);
         }
 
         if(start + batch > (int)testX.size()){
@@ -505,13 +506,16 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
 
         float start, end;
         start = (float)clock();
-
+        if(Config::instance()->applyPreproc()){
+            int ImgSize = 28;
+            cuApplyRandom(batch, clock() + epo, ImgSize);
+        }
         Config::instance()->setTraining(true);
 
         x.shuffle(5000, y, cuSampleWeight);
 
         DataLayerSpiking *dl = static_cast<DataLayerSpiking*>(Layers::instance()->get("data"));
-        dl->getBatchSpikesWithStreams(x, 0);
+        dl->loadBatchSpikes(x, 0);
 
         cuSTrVote->gpuClear();
         float cost = 0.0f;
@@ -520,17 +524,16 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
             int start = k * batch;
             printf("train %2d%%", 100 * start / (((int)x.size() + batch - 1)));
 
-            if(start + batch <= (int)x.size() - batch)
-                dl->getBatchSpikesWithStreams(x, start + batch);
-            else{
+            if(start + batch <= (int)x.size() - batch){
+                dl->loadBatchSpikes(x, start + batch);
+            }else{
                 int tstart = x.size() - batch;
-                dl->getBatchSpikesWithStreams(x, tstart);
+                dl->loadBatchSpikes(x, tstart);
             }
             if(start + batch > (int)x.size()){
                 start = (int)x.size() - batch;   
             }
  
-            dl->trainData();
             getSpikingNetworkCost(
                 y->getDev() + start, 
                 cuSampleWeight->getDev() + start, 

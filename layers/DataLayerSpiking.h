@@ -54,18 +54,21 @@ public:
         return fireCount;
     }
 
-	void trainData(cuMatrixVector<bool>& inputs, int start);
+	void getBatchSpikesWithPreproc(cuMatrixVector<bool>& inputs, int start);
 	void testData();
 
 	void printParameter(){};
     void printFireCount(){};
 	void synchronize();
 
-	void getBatchSpikesWithStreams(cuMatrixVector<bool>& inputs, int start);
+    void generateRandom(unsigned long long seed);
+	void getBatchSpikes(cuMatrixVector<bool>& inputs, int start);
+	void loadBatchSpikes(cuMatrixVector<bool>& inputs, int start);
 private:
 	cuMatrix<bool>* outputs;
     cuMatrix<int>* outputs_time;
     cuMatrix<int>* fireCount;
+    cuMatrix<float>* cu_randomNum;
 	cuMatrixVector<bool> batchSpeeches[2]; // batch size speeches,one for current read, one for buffer
 	cuMatrixVector<float> batchSamplesFloat[2]; //raw float samples, the original one before pre-processing
     cuMatrixVector<float> processOutputs; // the raw samples after pre-processing (distortion)

@@ -4,11 +4,18 @@
 #include <helper_functions.h>
 #include <helper_cuda.h>
 #include <math.h>
+#include <time.h>
+#include <curand_kernel.h>
 //#include <thread>
 #include "../common/Config.h"
 #include "../common/cuBase.h"
 #include "../common/util.h"
 #include "../dataAugmentation/cuTransformation.cuh"
+
+#define CONST_SPIKING_SCALE (5.5 * 255.0f)
+
+curandGenerator_t rand_gen_device;
+const curandRngType_t gen_t = CURAND_RNG_PSEUDO_DEFAULT;
 
 /*
  * dim3 block = dim3(batch, outputAmount);
@@ -32,10 +39,12 @@ DataLayerSpiking::DataLayerSpiking(std::string name){
     imgSize   = Config::instance()->getImageSize();
 	inputAmount = Config::instance()->getChannels();
 	outputAmount= inputAmount;
-	outputs = new cuMatrix<bool>(batch, outputDim * endTime, outputAmount);
+	outputs = new cuMatrix<bool>(batch, endTime * outputDim, outputAmount);
     outputs_time = new cuMatrix<int>(batch, outputDim * endTime, outputAmount);
 
     fireCount = new cuMatrix<int>(batch, outputDim, outputAmount);
+
+    cu_randomNum = new cuMatrix<float>(batch, endTime * inputDim, 1);
 
     bool has_distortion = Config::instance()->applyPreproc();
     for(int i = 0; i < 2; ++i){
@@ -59,6 +68,48 @@ DataLayerSpiking::DataLayerSpiking(std::string name){
 	checkCudaErrors(cudaStreamCreate(&stream1));
 
 	Layers::instance()->set(m_name, this);
+
+	curandStatus_t curandstatus = curandCreateGenerator(&rand_gen_device, gen_t);
+	if(curandstatus != CURAND_STATUS_SUCCESS)
+	{
+		char logStr[1024];
+		sprintf(logStr, "DataLayerSpiking::curandCreateGenerator fail\n");
+		LOG(logStr, "Result/log.txt");
+		assert(0);
+	}
+    
+}
+
+
+/*
+ * dim3 block = dim3(batch, inputDim);
+ * dim3 thread= dim3(min(1024, endTime));
+*/
+__global__ void g_dataLayer_poissonCode(
+    float** preprocs,
+    bool** inputs,
+    float* _randoms,
+    int batch,
+    int inputDim,
+    int endTime)
+{
+    int batchId = blockIdx.x;
+    int i_idx = blockIdx.y;
+    int speechSize = endTime * inputDim;
+
+    float * random = _randoms + batchId * speechSize;
+    float * preproc = preprocs[batchId];
+    bool * input = inputs[batchId];
+    float distorted = preproc[i_idx];
+    float freq = ((distorted + 1) * 255.0f / 2) / CONST_SPIKING_SCALE; // map back to freq range;
+    for(int t = 1; t < endTime; t += blockDim.x)
+    {
+        int time = t + threadIdx.x;
+        float r = random[time * inputDim + i_idx];
+        if(r < freq)    input[time * inputDim + i_idx] = true;
+        else    input[time * inputDim + i_idx] = false;
+    }
+
 }
 
 /*
@@ -149,30 +200,36 @@ void DataLayerSpiking::feedforward(){
 }; 
 
 //* apply the distortation here
-void DataLayerSpiking::trainData(cuMatrixVector<bool>& inputs, int start)
+void DataLayerSpiking::getBatchSpikesWithPreproc(cuMatrixVector<bool>& inputs, int start)
 {
-    if(Config::instance()->applyPreproc() == false)
-        return;
+    assert(Config::instance()->applyPreproc() == true);
+    
+    // generate the uniform random number
+    generateRandom(clock() + start);
 
     // cp the float raw sample to Gpu
     int id = 1 - this->myId;
     for(size_t i = 0; i < this->batchSamplesFloat[id].size(); i++){
         memcpy(this->batchSamplesFloat[id][i]->getHost(), inputs[i + start]->getHostRawImg(), sizeof(float) * this->batchSamplesFloat[id][i]->getLen());
         this->batchSamplesFloat[id][i]->toGpu(this->stream1);
+        this->batchSpeeches[id][i]->toGpu(this->stream1);
     }
     // apply the distortation
     cuApplyDistortion(batchSamplesFloat[id].m_devPoint, processOutputs.m_devPoint, batch, imgSize); 
 
     // map the distorted samples to spike times
+    g_dataLayer_poissonCode<<<dim3(batch, inputDim), dim3(min(1024, endTime))>>>(processOutputs.m_devPoint, batchSpeeches[id].m_devPoint, cu_randomNum->getDev(), batch, inputDim, endTime);
+    /* // do the same thing by CPU
     for(size_t i = 0; i < this->processOutputs.size(); i++){
         processOutputs[i]->toCpu();
         convertToSpikeTimes(processOutputs[i], inputs[i+start]->getSpikeTimes(), imgSize, endTime);
     }
-
+    */
     // show the distorted image
     if (Config::instance()->getImageShow()) {
 		for (int ff = batch - 1; ff >= 0; ff--) {
 			showImg(batchSamplesFloat[id][ff], 5);
+            processOutputs[ff]->toCpu();
 			showImg(processOutputs.m_vec[ff], 5);
 			cv::waitKey(0);
 		}
@@ -183,6 +240,11 @@ void DataLayerSpiking::testData()
 {
 }
 
+//* generate the random numbers for map preproc samples to poisson spike trains
+void DataLayerSpiking::generateRandom(unsigned long long seed)
+{
+	curandGenerateUniform(rand_gen_device, cu_randomNum->getDev(), cu_randomNum->getLen());
+}
 
 void DataLayerSpiking::synchronize(){
     myId = 1 - myId;
@@ -190,7 +252,7 @@ void DataLayerSpiking::synchronize(){
 }
 
 //* get the input spike trains in batch from the input speeches streams
-void DataLayerSpiking::getBatchSpikesWithStreams(cuMatrixVector<bool>& inputs, int start){
+void DataLayerSpiking::getBatchSpikes(cuMatrixVector<bool>& inputs, int start){
     int id = 1 - this->myId;
     for(size_t i = 0; i < this->batchSpeeches[id].size(); i++){
         inputs[i+start]->sparseToDense();
@@ -199,4 +261,12 @@ void DataLayerSpiking::getBatchSpikesWithStreams(cuMatrixVector<bool>& inputs, i
         inputs[i+start]->freeCpuMem();
         //this->batchSpeeches[i]->toGpu();
     }
+}
+
+
+void DataLayerSpiking::loadBatchSpikes(cuMatrixVector<bool>& inputs, int start){
+    if(Config::instance()->applyPreproc() == true)
+        getBatchSpikesWithPreproc(inputs, start);
+    else
+        getBatchSpikes(inputs, start);
 }

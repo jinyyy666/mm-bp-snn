@@ -6,7 +6,7 @@
 #include <vector>
 #include <random>
 
-
+#define CONST_SPIKING_SCALE (5.5 * 255.0f)
 
 int checkError(int x)
 {
@@ -165,7 +165,7 @@ int readMnistData(cuMatrixVector<float>& x,
 }
 
 
-void readMnistImg(const std::string& filename, std::vector<std::vector<std::vector<float> > >& data, int num)
+void readMnistImg(const std::string& filename, std::vector<cuMatrix<float>* >& data, int num)
 {
     std::ifstream file(filename.c_str(), std::ios::binary);
 	int id = 0;
@@ -179,12 +179,12 @@ void readMnistImg(const std::string& filename, std::vector<std::vector<std::vect
     readFileInform(file, number_of_images, n_rows, n_cols, num);
 
     for(int i = 0; i < number_of_images; ++i){
-        std::vector<std::vector<float> > tpmat(std::vector<std::vector<float> >(n_rows, std::vector<float>(n_cols, 1)));
+		cuMatrix<float>* tpmat = new cuMatrix<float>(n_rows, n_cols, 1);
         for(int r = 0; r < n_rows; ++r){
             for(int c = 0; c < n_cols; ++c){
                 unsigned char temp = 0;
                 file.read((char*) &temp, sizeof(temp));
-                tpmat[r][c] = (float)temp / (5.5 * 255.0f);
+                tpmat->set(r, c, 0, (float)temp / CONST_SPIKING_SCALE);
             }
         }
         data.push_back(tpmat);
@@ -194,7 +194,7 @@ void readMnistImg(const std::string& filename, std::vector<std::vector<std::vect
 
 void generatePoissonSpikes(
     cuMatrixVector<bool>& x, 
-    const std::vector<std::vector<std::vector<float> > >& data,
+    std::vector<cuMatrix<float>* >& data,
     int input_neurons,
     int end_time)
 {
@@ -204,9 +204,11 @@ void generatePoissonSpikes(
     for(int i = 0; i < data.size(); ++i){
         std::vector<std::vector<int> > * sp_time = new std::vector<std::vector<int> >(input_neurons, std::vector<int>());
         int index = -1;
-        for(int j = 0; j < data[i].size(); ++j){
-            for(int k = 0; k < data[i][j].size(); ++k){
-                float freq = data[i][j][k];
+        for(int j = 0; j < data[i]->rows; ++j){
+            for(int k = 0; k < data[i]->cols; ++k){
+                float freq = data[i]->get(j, k, 0);
+                // map the freq to (-1, 1) for future processing
+                data[i]->set(j, k, 0, (freq * CONST_SPIKING_SCALE) * 2.0f / 255.0f - 1.0f);
                 index++;
                 if(fabsf(freq - 0.0f) < 1e-5)   continue;
                 for(int time = 1; time < end_time; ++time){
@@ -214,7 +216,7 @@ void generatePoissonSpikes(
                 }
             }
         }
-        cuMatrix<bool>* tpmat = new cuMatrix<bool>(end_time, input_neurons, 1, sp_time);
+        cuMatrix<bool>* tpmat = new cuMatrix<bool>(end_time, input_neurons, 1, sp_time, data[i]);
         tpmat->freeCudaMem();
         x.push_back(tpmat);
     } 
@@ -227,9 +229,9 @@ int readSpikingMnist(
     int input_neurons,
     int end_time)
 {
-    vector<vector<vector<float> > > data;
+    vector<cuMatrix<float>* > data;
     readMnistImg(filename, data, num);
-    assert(!data.empty() && data[0].size() * data[0].size() == input_neurons);
+    assert(!data.empty() && data[0]->getLen() == input_neurons);
 
     generatePoissonSpikes(x, data, input_neurons, end_time);
     return x.size(); 

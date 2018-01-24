@@ -9,7 +9,7 @@
 #include "net_spiking.cuh"
 #include "common/cuMatrix.h"
 #include "common/util.h"
-#include "dataAugmentation/cuTrasformation.cuh"
+#include "dataAugmentation/cuTransformation.cuh"
 #include "common/Config.h"
 #include "common/cuMatrixVector.h"
 
@@ -416,6 +416,7 @@ void runNMnist(){
 	float start,end;
     
 	int cmd;
+	cuInitDistortionMemery(batch, 28);
     /*
 	printf("1. random init weight\n2. Read weight from the checkpoint\nChoose the way to init weight:");
 
@@ -493,18 +494,20 @@ void runSpikingMnist(){
 #else
  	readSpikingMnistData(trainX, trainY, "mnist/train-images-idx3-ubyte", "mnist/train-labels-idx1-ubyte", train_samples, input_neurons, end_time);
  	readSpikingMnistData(testX , testY, "mnist/t10k-images-idx3-ubyte", "mnist/t10k-labels-idx1-ubyte",  test_samples, input_neurons, end_time);
-
 #endif
 	MemoryMonitor::instance()->printCpuMemory();
 	MemoryMonitor::instance()->printGpuMemory();
 
- 	//* build SNN net 
+ 	//* build SNN net
+ 	int ImgSize = 28; // fixed here for spiking mnist
+	Config::instance()->setImageSize(ImgSize);
  	int nsamples = trainX.size();
 
  	int batch = Config::instance()->getBatchSize();
 	float start,end;
     
 	int cmd;
+	cuInitDistortionMemery(batch, ImgSize);
     /*
 	printf("1. random init weight\n2. Read weight from the checkpoint\nChoose the way to init weight:");
 
