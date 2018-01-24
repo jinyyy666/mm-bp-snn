@@ -54,7 +54,7 @@ public:
         return fireCount;
     }
 
-	void trainData();
+	void trainData(cuMatrixVector<bool>& inputs, int start);
 	void testData();
 
 	void printParameter(){};
@@ -67,8 +67,11 @@ private:
     cuMatrix<int>* outputs_time;
     cuMatrix<int>* fireCount;
 	cuMatrixVector<bool> batchSpeeches[2]; // batch size speeches,one for current read, one for buffer
+	cuMatrixVector<float> batchSamplesFloat[2]; //raw float samples, the original one before pre-processing
+    cuMatrixVector<float> processOutputs; // the raw samples after pre-processing (distortion)
     int myId; // use to asynchoronously load the data
 	int batch;
+    int imgSize; // size for the raw float images (mnist)
 	cudaStream_t stream1;
 };
 #endif

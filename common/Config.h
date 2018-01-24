@@ -758,6 +758,10 @@ public:
 		return m_distortion->getValue();
 	}
 
+    bool applyPreproc(){
+        return (fabs(getDistortion() >= 0.1) || fabs(getScale() >= 1) || fabs(getRotation() >= 1));
+    }
+
 	const std::vector<ConfigBase*> getFirstLayers(){
 		return m_firstLayers;
 	}

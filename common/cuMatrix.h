@@ -17,7 +17,7 @@ class cuMatrix
 {
 public:
 	/*constructed function with hostData*/
-	cuMatrix(T *_data, int _n,int _m, int _c):rows(_n), cols(_m), channels(_c), hostData(NULL), devData(NULL), spikeTimes(NULL){
+	cuMatrix(T *_data, int _n,int _m, int _c):rows(_n), cols(_m), channels(_c), hostData(NULL), devData(NULL), spikeTimes(NULL), rawImg(NULL){
 		/*malloc host data*/
 		mallocHost();
 		/*deep copy */
@@ -25,11 +25,15 @@ public:
 	}
 	
 	/*constructed function with rows and cols*/
-	cuMatrix(int _n,int _m, int _c):rows(_n), cols(_m), channels(_c), hostData(NULL), devData(NULL), spikeTimes(NULL){
+	cuMatrix(int _n,int _m, int _c):rows(_n), cols(_m), channels(_c), hostData(NULL), devData(NULL), spikeTimes(NULL), rawImg(NULL){
 	}
 
     /*constructed function with spike times */
-    cuMatrix(int _n, int _m, int _c, std::vector<std::vector<int> > * sp_time):rows(_n), cols(_m), channels(_c), hostData(NULL), devData(NULL), spikeTimes(sp_time){
+    cuMatrix(int _n, int _m, int _c, std::vector<std::vector<int> > * sp_time):rows(_n), cols(_m), channels(_c), hostData(NULL), devData(NULL), spikeTimes(sp_time), rawImg(NULL){
+    }
+
+    /*constructd function with spike times and raw image*/
+    cuMatrix(int _n, int _m, int _c, std::vector<std::vector<int> > * sp_time, cuMatrix<float>* raw_img):rows(_n), cols(_m), channels(_c), hostData(NULL), devData(NULL), spikeTimes(sp_time), rawImg(raw_img){
     }
 
 	/*free cuda memory*/
@@ -56,6 +60,8 @@ public:
 			MemoryMonitor::instance()->freeGpuMemory(devData);
         if(NULL != spikeTimes)
             delete spikeTimes;
+        if(NULL != rawImg)
+            delete rawImg;
 	}
 
     /* convert the spikes times (sparse) to the dense binary response matrix */
@@ -72,6 +78,19 @@ public:
         }
     }
 
+    /* return the host ptr to the raw img */
+    float *& getHostRawImg(){
+        if(rawImg == NULL){
+            printf("Fatal Error::Try to use the rawImg ptr, but it is not properly set!\n");
+            assert(0);
+        }
+        return rawImg->getHost();
+    }
+
+    /* return the spike times*/
+    std::vector<std::vector<int> > *& getSpikeTimes(){
+        return spikeTimes;    
+    }
 
 	/*copy the device data to host data*/ 
 	void toCpu(){
@@ -172,6 +191,9 @@ private:
 
     /* spike time data*/
     std::vector<std::vector<int> > * spikeTimes;
+
+    /* raw image before distortion*/
+    cuMatrix<float>* rawImg;
 private:
 	void mallocHost(){
 		if(NULL == hostData){

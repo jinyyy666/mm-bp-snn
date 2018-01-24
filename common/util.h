@@ -9,6 +9,10 @@
 #include <iostream>
 #include <vector>
 #include <stddef.h>
+#include <algorithm>
+#include <functional>
+#include <iterator>
+
 // CUDA-C includes
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -40,5 +44,18 @@ void initMatrix(cuMatrix<float>* M, float iniw);
 void checkMatrixIsSame(cuMatrix<float>*x, cuMatrix<float>*y);
 void checkMatrixIsSame(cuMatrix<bool>*x, cuMatrix<bool>*y, int n_outputs);
 int extractNeuronIndex(const std::string& name);
+void convertToSpikeTimes(cuMatrix<float>* preproc, std::vector<std::vector<int> >*& sp_times, int imgSize, int end_time);
 
+//* reload the << for print the vector
+template<class T> std::ostream& operator<<(std::ostream& out, const std::vector<T>& v)
+{
+    if(!v.empty()){
+        out << '[';
+        std::copy(v.begin(), v.end(), std::ostream_iterator<T>(out, ", "));
+        out << "\b\b]";
+    }
+    return out;
+}
+
+void print2DVectorToFile(std::vector<std::vector<int> >& v, std::string filename);
 #endif

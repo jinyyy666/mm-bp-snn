@@ -5,10 +5,13 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <iostream>
+#include <random>
 
 #include "opencv2/opencv.hpp"
 #include "opencv2/core/core_c.h"
 #include "opencv2/highgui/highgui.hpp"
+
+#define CONST_SPIKING_SCALE (5.5 * 255.0f)
 
 using namespace cv;
 using namespace std;
@@ -315,4 +318,40 @@ int extractNeuronIndex(const string& name)
     }
     string index = name.substr(pos + 1);
     return atoi(index.c_str());
+}
+
+void convertToSpikeTimes(cuMatrix<float>* preproc_img, vector<vector<int> >*& sp_times, int imgSize, int end_time){
+    std::random_device rd;
+    std::mt19937 e2(rd());
+    std::uniform_real_distribution<> dist(0, 1);
+
+    assert(sp_times->size() == preproc_img->getLen());
+    assert(imgSize == preproc_img->rows);
+    assert(imgSize == preproc_img->cols);
+    assert(imgSize > 0);
+
+    int index = -1;
+    for(int i = 0; i < sp_times->size(); ++i){
+        int r = i / imgSize;
+        int c = i % imgSize;
+        float distorted = preproc_img->get(r, c, 0); // this value is in (-1, 1);
+        float freq = ((distorted + 1) * 255.0f / 2) / CONST_SPIKING_SCALE; // map back to freq range
+        index++;
+        (*sp_times)[index].clear();
+        if(freq < 0 || fabs(freq - 0.0f) < 1e-5)    continue;
+        for(int time = 1; time < end_time; ++time){
+            if(dist(e2) < freq) (*sp_times)[index].push_back(time);
+        }
+    }
+}
+
+void print2DVectorToFile(vector<vector<int> >& v, string filename){
+    ofstream f_out(filename.c_str());
+    if(!f_out.is_open()){
+       cout<<"print2DVectorToFile::Cannot open the file: "<<filename<<endl;
+        exit(EXIT_FAILURE); 
+    }
+    for(int i = 0; i < v.size(); i++){
+        f_out<<v[i].size()<<endl;
+    }
 }

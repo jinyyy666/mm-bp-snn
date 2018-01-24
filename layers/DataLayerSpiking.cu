@@ -8,7 +8,7 @@
 #include "../common/Config.h"
 #include "../common/cuBase.h"
 #include "../common/util.h"
-
+#include "../dataAugmentation/cuTransformation.cuh"
 
 /*
  * dim3 block = dim3(batch, outputAmount);
@@ -29,6 +29,7 @@ DataLayerSpiking::DataLayerSpiking(std::string name){
 	outputDim = inputDim;
     endTime   = Config::instance()->getEndTime();
 	batch     = Config::instance()->getBatchSize();
+    imgSize   = Config::instance()->getImageSize();
 	inputAmount = Config::instance()->getChannels();
 	outputAmount= inputAmount;
 	outputs = new cuMatrix<bool>(batch, outputDim * endTime, outputAmount);
@@ -36,11 +37,23 @@ DataLayerSpiking::DataLayerSpiking(std::string name){
 
     fireCount = new cuMatrix<int>(batch, outputDim, outputAmount);
 
+    bool has_distortion = Config::instance()->applyPreproc();
     for(int i = 0; i < 2; ++i){
         for(int j = 0; j < batch; j++){
             batchSpeeches[i].push_back(new cuMatrix<bool>(endTime, inputDim, Config::instance()->getChannels()));
+            if(has_distortion){
+                batchSamplesFloat[i].push_back(new cuMatrix<float>(imgSize, imgSize, Config::instance()->getChannels()));
+            }
         }
         batchSpeeches[i].toGpu();
+        if(has_distortion)
+            batchSamplesFloat[i].toGpu();
+    }
+    if(has_distortion){
+        for(int i = 0; i < batch; ++i){
+            processOutputs.push_back(new cuMatrix<float>(imgSize, imgSize, Config::instance()->getChannels()));
+        }
+        processOutputs.toGpu();
     }
 
 	checkCudaErrors(cudaStreamCreate(&stream1));
@@ -135,8 +148,35 @@ void DataLayerSpiking::feedforward(){
 
 }; 
 
-void DataLayerSpiking::trainData()
+//* apply the distortation here
+void DataLayerSpiking::trainData(cuMatrixVector<bool>& inputs, int start)
 {
+    if(Config::instance()->applyPreproc() == false)
+        return;
+
+    // cp the float raw sample to Gpu
+    int id = 1 - this->myId;
+    for(size_t i = 0; i < this->batchSamplesFloat[id].size(); i++){
+        memcpy(this->batchSamplesFloat[id][i]->getHost(), inputs[i + start]->getHostRawImg(), sizeof(float) * this->batchSamplesFloat[id][i]->getLen());
+        this->batchSamplesFloat[id][i]->toGpu(this->stream1);
+    }
+    // apply the distortation
+    cuApplyDistortion(batchSamplesFloat[id].m_devPoint, processOutputs.m_devPoint, batch, imgSize); 
+
+    // map the distorted samples to spike times
+    for(size_t i = 0; i < this->processOutputs.size(); i++){
+        processOutputs[i]->toCpu();
+        convertToSpikeTimes(processOutputs[i], inputs[i+start]->getSpikeTimes(), imgSize, endTime);
+    }
+
+    // show the distorted image
+    if (Config::instance()->getImageShow()) {
+		for (int ff = batch - 1; ff >= 0; ff--) {
+			showImg(batchSamplesFloat[id][ff], 5);
+			showImg(processOutputs.m_vec[ff], 5);
+			cv::waitKey(0);
+		}
+	}
 }
 
 void DataLayerSpiking::testData()
