@@ -7,6 +7,7 @@
 
 __device__ float d_nonLinearity(float val, int NONLIN);
 __device__ float d_dnonLinearity(float val,int NONLIN);
+__device__ float d_Spiking_accumulate_effect(int* output_time, int* input_time, int n_ospikes, int n_ispikes, int o_idx, int i_idx, int outputDim, int inputDim, int endTime, int T_REFRAC, float TAU_M, float TAU_S);
 __device__ void   swap(float& val1, float& val2);
 
 
@@ -25,6 +26,11 @@ __global__ void g_vecAdd(float*v_w, float*wgrad,float* w,
 
 __global__ void g_getBgrad(float* softMaxDelta, float* bgrad, float* dropb, int batch);
 __global__ void g_getBgrad(float* softMaxDelta, float* bgrad, int batch);
+
+__global__ void g_sgd_vecAdd(float** v_m, float** wgrad, float** w, int lenw, float momentum, float lr);
+__global__ void g_adam_vecAdd(float** g1_ws, float** g2_ws, float*  b1_t, float*  b2_t, float** _wgrad, float** _w, int lenw, float lr);
+
+
 
 __global__ void g_getCost_3(float* cost,
 	float** weight,
@@ -66,7 +72,7 @@ __global__ void g_preDeltaFormat(float* cuPoolFlDelta,
 function: transform the binary response matrix to the spike times
 threads : <<<dim3(batch), dim3(min(outputDim, 1024))>>>
 */
-__global__ void g_response_2_spiketime(bool* outputs, int* outputs_time, int ouputDim, int endTime);
+__global__ void g_response_2_spiketime(bool* outputs, int* outputs_time, int outputArea, int ouputDim, int endTime);
 
 /*
 function: normalize the fire counts by the max count for SNN

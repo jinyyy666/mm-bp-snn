@@ -192,6 +192,7 @@ void DataLayerSpiking::feedforward(){
     g_response_2_spiketime<<<block, thread>>>(
         outputs->getDev(),
         outputs_time->getDev(),
+        outputs->getArea(),
         outputDim,
         endTime);
     checkCudaErrors(cudaStreamSynchronize(0));

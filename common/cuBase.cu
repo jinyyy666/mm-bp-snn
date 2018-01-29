@@ -33,6 +33,53 @@ __device__ float d_dnonLinearity(float val,int NONLIN){
 	}
 }
 
+/* given each input and output spike train of spike times, 
+ * compute the accumulative synaptic effect
+ * input: input spikes: endTime * inputDim
+ * output: output spikes: endTime * outputDim
+ */
+__device__ float d_Spiking_accumulate_effect(
+    int* output_time,
+    int* input_time,
+    int n_ospikes,
+    int n_ispikes,
+    int o_idx,
+    int i_idx,
+    int outputDim,
+    int inputDim,
+    int endTime,
+    int T_REFRAC,
+    float TAU_M,
+    float TAU_S)
+{
+    float acc_response = 0.0f;
+    int t_post_last = 1;
+    for(int i = 0; i < n_ospikes; ++i){
+        int t_post = output_time[o_idx * endTime + i];
+        float sum = 0.0f;
+        
+        int ub = t_post;
+        int lb = max(1, int(t_post - 4*TAU_M));
+        for(int j = 0; j < n_ispikes; ++j){
+            int t_pre = input_time[i_idx * endTime + j];
+            if(t_pre < lb || t_pre >= ub)    continue;
+
+            int pre_time = t_pre + T_REFRAC;
+            if(pre_time > t_post)   continue;
+            int s = t_post - t_post_last;
+            int t = t_post - pre_time;
+            float factor = __expf(-1*max(t - s, 0)/TAU_S)/(1 - TAU_S/TAU_M);
+            sum += factor * (__expf(-1*min(s, t)/TAU_M) - __expf(-1*min(s, t)/TAU_S));
+        }
+        t_post_last = t_post + T_REFRAC;
+        acc_response += sum;
+    }
+    if(n_ospikes == 0 && n_ispikes != 0)
+        acc_response = 0.1;
+    return acc_response;
+}
+
+
 __global__ void g_dnonLinearity(float* delta, float*acti, int len, int NONLIN)
 {
 	int skip = gridDim.x * blockDim.x;
@@ -122,6 +169,67 @@ __global__ void g_vecAdd(float*v_w, float*wgrad,float* w,
 			b[id] -= v_b[id];
 		}
 	}
+}
+
+/*
+ * block  = dim3(outputAmount)
+ * thread = dim3(min(256, w[0]->getLen()))
+ */
+__global__ void g_sgd_vecAdd(float** momentum_w, float** _wgrad, float** _w, int lenw, float momentum, float lr)
+{
+    int ok = blockIdx.x;
+    float* v_w   = momentum_w[ok];
+    float* w     = _w[ok];
+    float* wgrad = _wgrad[ok];
+    int idx = threadIdx.x;
+    for(int i = 0; i < lenw; i += blockDim.x * gridDim.x)
+    {
+        int id = i + idx;
+        if(id < lenw)
+        {
+            v_w[id] = v_w[id] * momentum + wgrad[id] * lr;
+            w[id]  -= v_w[id];
+        }
+    }
+}
+
+
+/*
+ * block  = dim3(outputAmount)
+ * thread = dim3(min(256, w[0]->getLen()))
+ */
+__global__ void g_adam_vecAdd(float** g1_ws, float** g2_ws, float* b1_t, float* b2_t, float** _wgrad, float** _w, int lenw, float lr)
+{
+    int ok = blockIdx.x;
+    float* g1_w  = g1_ws[ok];
+    float* g2_w  = g2_ws[ok];
+    float* w     = _w[ok];
+    float* wgrad = _wgrad[ok];
+    int idx = threadIdx.x;
+    float b1t = b1_t[0];
+    float b2t = b2_t[0];
+    const float b1 = 0.9f;
+    const float b2 = 0.999f;
+    const float eps = 1.e-8f;
+    __syncthreads();
+
+    for(int i = 0; i < lenw; i += blockDim.x * gridDim.x)
+    {
+        int id = i + idx;
+        if(id < lenw)
+        {
+            float weight_grad = wgrad[id];
+            float g1 = b1 * g1_w[id] + (1 - b1) * weight_grad;
+            float g2 = b2 * g2_w[id] + (1 - b2) * weight_grad * weight_grad;
+            w[id]  -= lr * (g1/(1.f - b1t)) / ((float)sqrtf(g2/(1. - b2t)) + eps);
+            g1_w[id] = g1;
+            g2_w[id] = g2;
+        }
+    }
+    if(threadIdx.x == 0 && ok == 0){
+        b1_t[0] = b1t * b1;
+        b2_t[0] = b2t * b2;
+    }
 }
 
 
@@ -382,16 +490,17 @@ __global__ void g_transform_2_batch(float* inputs_rt, int endTime, int outputDim
 }
 
 /*
-* function: transform the binary response matrix (batch, outputDim * endTime) to spike times matrix 
-* (batch, outputDim * "num of spikes"), directly store the spike times. 
-* blocks  : dim3(batch)
+* function: transform the binary response matrix (batch, outputDim * endTime, outputAmount) 
+* to spike times matrix (batch, outputDim * "num of spikes", outputAmount),directly store the spike times. 
+* blocks  : dim3(batch, outputAmount)
 * threads : dim3(min(1024, outputDim))
 */
-__global__ void g_response_2_spiketime(bool* outputs, int* outputs_time, int outputDim, int endTime)
+__global__ void g_response_2_spiketime(bool* outputs, int* outputs_time, int outputArea, int outputDim, int endTime)
 {
     int batchId = blockIdx.x;
-    bool* output = outputs + batchId * endTime * outputDim;
-    int* output_time = outputs_time +  batchId * endTime * outputDim;
+    int ok = blockIdx.y;
+    bool* output = outputs + ok * outputArea + batchId * endTime * outputDim;
+    int* output_time = outputs_time + ok * outputArea + batchId * endTime * outputDim;
 
     for(int i = 0; i < outputDim; i += blockDim.x)
     {
