@@ -392,6 +392,69 @@ void Config:: get_layers_config(string &str){
             sprintf(logStr, "NAME          : %s\n", name.c_str()); LOG(logStr, "Result/log.txt");
             sprintf(logStr, "INPUT_NEURONS : %d\n", input_neurons); LOG(logStr, "Result/log.txt");
         }
+        else if(type == std::string("CONVSPIKING")){
+            int ks = get_word_int(layers[i], "KERNEL_SIZE");
+            int ka = get_word_int(layers[i], "KERNEL_AMOUNT");
+            int pd = get_word_int(layers[i], "PADDING");
+            float initW = get_word_float(layers[i], "initW");
+            std::string initType = get_word_type(layers[i], "initType");
+
+            float vth = get_word_float(layers[i], "VTH");
+            int t_ref = get_word_int(layers[i], "T_REFRAC");
+            float tau_m = get_word_float(layers[i], "TAU_M");
+            float tau_s = get_word_float(layers[i], "TAU_S");
+
+            std::string weight_path = get_word_type(layers[i], "weightPath");
+
+            std::map<std::string, std::string> ref_paths;
+            ref_paths[std::string("refWeightPath")] = get_word_type(layers[i], "refWeightPath");
+            ref_paths[std::string("refOutputTrainPath")]=get_word_type(layers[i],"refOutputTrainPath");
+            ref_paths[std::string("refOutputTestPath")]=get_word_type(layers[i],"refOutputTestPath");
+
+            layer = new ConfigConvSpiking(name, type, input, ks, ka, pd, initW, initType, 
+                    vth, t_ref, tau_m, tau_s, weight_path, ref_paths);
+            char logStr[256];
+            sprintf(logStr,"\n\n********ConvSpiking layer********\n"); LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "NAME          : %s\n", name.c_str());     LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "INPUT         : %s\n", input.c_str());    LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "KERNEL_SIZE   : %d\n", ks);               LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "KERNEL_AMOUNT : %d\n", ka);               LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "PADDING       : %d\n", pd);               LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "initW         : %f\n", initW);            LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "VTH           : %f\n", vth);              LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "T_REFRAC      : %d\n", t_ref);            LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "TAU_M         : %f\n", tau_m);            LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "TAU_S         : %f\n", tau_s);            LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "refWeightPath : %s\n", ref_paths[std::string("refWeightPath")].c_str());LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "refOuputTrainPath  : %s\n", ref_paths[std::string("refOutputTrainPath")].c_str());LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "refOutputTestPath  : %s\n", ref_paths[std::string("refOutputTestPath")].c_str());LOG(logStr, "Result/log.txt"); 
+        }
+        else if(type == std::string("POOLINGSPIKING")){
+            int size = get_word_int(layers[i], "SIZE");
+            int skip = get_word_int(layers[i], "SKIP");
+            float vth = get_word_float(layers[i], "VTH");
+            int t_ref = get_word_int(layers[i], "T_REFRAC");
+            float tau_m = get_word_float(layers[i], "TAU_M");
+            float tau_s = get_word_float(layers[i], "TAU_S");
+
+            std::map<std::string, std::string> ref_paths;
+            ref_paths[std::string("refOutputTrainPath")]=get_word_type(layers[i], "refOutputTrainPath");
+            ref_paths[std::string("refOutputTestPath")]=get_word_type(layers[i], "refOutputTestPath");
+
+            layer = new ConfigPoolingSpiking(name, type, input,size,skip, vth, t_ref, tau_m, tau_s, ref_paths);
+            char logStr[256];
+            sprintf(logStr, "\n\n*****Pooling Spiking layer*****\n"); LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "NAME          : %s\n", name.c_str());LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "INPUT         : %s\n", input.c_str());LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "size          : %d\n", size);LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "skip          : %d\n", skip);LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "VTH           : %f\n", vth);              LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "T_REFRAC      : %d\n", t_ref);            LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "TAU_M         : %f\n", tau_m);            LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "TAU_S         : %f\n", tau_s);            LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "refOuputTrainPath  : %s\n", ref_paths[std::string("refOutputTrainPath")].c_str());LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "refOutputTestPath  : %s\n", ref_paths[std::string("refOutputTestPath")].c_str());LOG(logStr, "Result/log.txt");
+        }
         else if(type == std::string("SPIKING")){ 
             int num_classes = get_word_int(layers[i], "NUM_CLASSES");
 
@@ -431,30 +494,30 @@ void Config:: get_layers_config(string &str){
             m_classes = num_classes;
             char logStr[256];
             sprintf(logStr, "\n\n********Spiking Layer********\n");LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "NAME                    : %s\n", name.c_str());LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "NUM_NEURONS             : %d\n", num_neurons);LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "INPUT                   : %s\n", input.c_str());LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "VTH                     : %f\n", vth);LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "T_REFRAC                : %d\n", t_ref);LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "TAU_M                   : %f\n", tau_m);LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "TAU_S                   : %f\n", tau_s);LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "initW                   : %f\n", initW);LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "weightConnect           : %d\n", weight_connect);LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "initType                : %s\n", initType.c_str());LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "weightPath              : %s\n", weight_path.c_str());LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "lweightPath             : %s\n", lweight_path.c_str());LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "laterialType            : %s\n", laterial_type.c_str());LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "reservoirDim            : %s\n", reservoir_dim.c_str());LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "localInbStrength        : %f\n", local_inb_strength);LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "UNDESIRED_LEVEL         : %f\n", undesired_level);LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "DESIRED_LEVEL           : %f\n", desired_level);LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "MARGIN                  : %f\n", margin);LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "refWeightPath           : %s\n", ref_paths[std::string("refWeightPath")].c_str());LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "refLWeightPath          : %s\n", ref_paths[std::string("refLWeightPath")].c_str());LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "refOuputTrainPath       : %s\n", ref_paths[std::string("refOutputTrainPath")].c_str());LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "refOutputTestPath       : %s\n", ref_paths[std::string("refOutputTestPath")].c_str());LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "ADD_BIAS                : %d\n", has_bias);LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "BIAS_FREQ               : %d\n", dummy_freq);LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "NAME               : %s\n", name.c_str());LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "NUM_NEURONS        : %d\n", num_neurons);LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "INPUT              : %s\n", input.c_str());LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "VTH                : %f\n", vth);LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "T_REFRAC           : %d\n", t_ref);LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "TAU_M              : %f\n", tau_m);LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "TAU_S              : %f\n", tau_s);LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "initW              : %f\n", initW);LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "weightConnect      : %d\n", weight_connect);LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "initType           : %s\n", initType.c_str());LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "weightPath         : %s\n", weight_path.c_str());LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "lweightPath        : %s\n", lweight_path.c_str());LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "laterialType       : %s\n", laterial_type.c_str());LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "reservoirDim       : %s\n", reservoir_dim.c_str());LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "localInbStrength   : %f\n", local_inb_strength);LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "UNDESIRED_LEVEL    : %f\n", undesired_level);LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "DESIRED_LEVEL      : %f\n", desired_level);LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "MARGIN             : %f\n", margin);LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "refWeightPath      : %s\n", ref_paths[std::string("refWeightPath")].c_str());LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "refLWeightPath     : %s\n", ref_paths[std::string("refLWeightPath")].c_str());LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "refOuputTrainPath  : %s\n", ref_paths[std::string("refOutputTrainPath")].c_str());LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "refOutputTestPath  : %s\n", ref_paths[std::string("refOutputTestPath")].c_str());LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "ADD_BIAS           : %d\n", has_bias);LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "BIAS_FREQ          : %d\n", dummy_freq);LOG(logStr, "Result/log.txt");
         }
         else if(type == std::string("SOFTMAXSPIKING")){
             int num_classes = get_word_int(layers[i], "NUM_CLASSES");

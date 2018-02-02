@@ -556,6 +556,73 @@ public:
 	}
 };
 
+class ConfigConvSpiking : public ConfigBase
+{
+public:
+	ConfigConvSpiking(std::string name, std::string type, std::string input, int kernelSize, 
+              int amount, int padding, float initW, std::string initType, float vth,
+              float t_refrac, float tau_m, float tau_s, std::string weight_path,
+              std::map<std::string, std::string> ref_paths)
+    {
+        m_kernelSize = kernelSize;
+        m_padding = padding;
+        m_amount = amount;
+        m_name = name;
+        m_input = input;
+        m_type = type;
+        m_initW = initW;
+        m_initType = initType;
+        m_vth = vth;
+        m_t_ref = t_refrac;
+        m_tau_m = tau_m;
+        m_tau_s = tau_s;
+        m_weightPath = weight_path;
+        m_ref_weight_path = ref_paths[std::string("refWeightPath")];
+        m_ref_output_train_path = ref_paths[std::string("refOutputTrainPath")];
+        m_ref_output_test_path = ref_paths[std::string("refOutputTestPath")];
+	}
+    int m_kernelSize;
+    int m_padding;
+    int m_amount;
+    float m_vth;
+    int m_t_ref;
+    float m_tau_m;
+    float m_tau_s;
+    std::string m_weightPath;
+    std::string m_ref_weight_path;
+    std::string m_ref_output_train_path;
+    std::string m_ref_output_test_path;
+};
+
+class ConfigPoolingSpiking : public ConfigBase
+{
+public:
+    ConfigPoolingSpiking(std::string name, std::string type, std::string input, int size, 
+            int skip, float vth, float t_refrac, float tau_m, float tau_s, std::map<std::string, std::string> ref_paths)
+    {
+        m_name = name;
+        m_input = input;
+        m_type = type;
+        m_size = size;
+        m_skip = skip;
+        m_vth = vth;
+        m_t_ref = t_refrac;
+        m_tau_m = tau_m;
+        m_tau_s = tau_s;
+        m_ref_output_train_path = ref_paths[std::string("refOutputTrainPath")];
+        m_ref_output_test_path = ref_paths[std::string("refOutputTestPath")];
+    }
+    int m_size;
+    int m_skip;
+    float m_vth;
+    int m_t_ref;
+    float m_tau_m;
+    float m_tau_s;
+    std::string m_ref_output_train_path;
+    std::string m_ref_output_test_path;
+};
+
+
 class ConfigSpiking : public ConfigBase
 {
 public:
@@ -672,12 +739,9 @@ public:
 	float getMomentum(){
 		return momentum;
 	}
-	void setLrate(float _lrate){
-		lrate = _lrate;
-    }
-	float getLrate(){
-		return lrate;
-	}
+	void setLrate(float _lrate){lrate = _lrate;}
+	float getLrate(){return lrate;}
+
 	void initPath(std::string path){
 		m_path = path;
 		init(m_path);
