@@ -41,7 +41,7 @@ void createGaussian(float* gaussian, float dElasticSigma1, float dElasticSigma2,
 void dropDelta(cuMatrix<float>* M, float cuDropProb);
 void dropScale(cuMatrix<float>* M, float cuDropProb);
 void initMatrix(cuMatrix<float>* M, float iniw);
-void checkMatrixIsSame(cuMatrix<float>*x, cuMatrix<float>*y);
+void checkMatrixIsSame(cuMatrix<float>*x, cuMatrix<float>*y, int channel = 0);
 void checkMatrixIsSame(cuMatrix<bool>*x, cuMatrix<bool>*y, int n_outputs);
 int extractNeuronIndex(const std::string& name);
 void convertToSpikeTimes(cuMatrix<float>* preproc, std::vector<std::vector<int> >*& sp_times, int imgSize, int end_time);
@@ -58,4 +58,5 @@ template<class T> std::ostream& operator<<(std::ostream& out, const std::vector<
 }
 
 void print2DVectorToFile(std::vector<std::vector<int> >& v, std::string filename);
+void readSpikesFromDumpfile(const std::string& filename, cuMatrix<bool>*& x);
 #endif

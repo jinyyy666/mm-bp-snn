@@ -262,7 +262,7 @@ void initMatrix(cuMatrix<float>* M, float initW)
     M->toGpu();
 }
 
-void checkMatrixIsSame(cuMatrix<float>*x, cuMatrix<float>*y)
+void checkMatrixIsSame(cuMatrix<float>*x, cuMatrix<float>*y, int channel)
 {
     assert(x->rows == y->rows);
     assert(x->cols == y->cols);
@@ -272,6 +272,7 @@ void checkMatrixIsSame(cuMatrix<float>*x, cuMatrix<float>*y)
             for(int k = 0; k < x->channels; k++){
                 float diff = x->get(i, j, k) - y->get(i, j, k);
                 if(fabs(diff) > 0.0001){
+                    printf("\n for %d_th weight matrix (or filter)", channel);
                     printf("\n%d %d %d %f %f %f\n", i, j, k, x->get(i,j, k), y->get(i,j,k), diff);
                 }
                 assert(fabs(diff) < 0.0001);
@@ -281,25 +282,24 @@ void checkMatrixIsSame(cuMatrix<float>*x, cuMatrix<float>*y)
 }
 
 //* this is only used to check the spike outputs
-//* the matrix: 1 x (endTime * outputDim)
+//* the matrix: 1 x (endTime * outputSize) x outputAmount
 void checkMatrixIsSame(cuMatrix<bool>*x, cuMatrix<bool>*y, int n_outputs)
 {
     assert(x->rows == y->rows);
     assert(x->cols == y->cols);
     assert(x->channels == y->channels);
-    assert(x->channels == 1);
     int nrows = x->rows, ncols = x->cols;
-    for(int i = 0; i < nrows; i++){
-        for(int j = 0; j < ncols; j++){
-            for(int k = 0; k < x->channels; k++){
+    for(int c = 0; c < x->channels; c++){
+        for(int i = 0; i < nrows; i++){
+            for(int j = 0; j < ncols; j++){
                 int t = j / n_outputs;
                 int idx = j % n_outputs;
-                float diff = int(x->get(i, j, k)) - int(y->get(i, j, k));
+                float diff = int(x->get(i, j, c)) - int(y->get(i, j, c));
                 if(fabs(diff) > 0.001){
-                    printf("\n%d %d %d %d %d %f\n", i, j, k, x->get(i,j, k), y->get(i,j,k), diff);
-                    std::cout<<"For neuron: "<<idx<<" at time: "<<t<<"\n"
-                            <<(x->get(i,j,k) ? "Expect to fire" : "Expect not fire")<<"\n"
-                            <<(y->get(i,j,k) ? "But fire" : "But not fire")<<std::endl;
+                    printf("\n%d %d %d %d %d %f\n", i, j, c, x->get(i,j, c), y->get(i,j,c), diff);
+                    std::cout<<"For neuron: "<<idx<<" in output channel: "<<c<<" at time: "<<t<<"\n"
+                            <<(x->get(i,j,c) ? "Expect to fire" : "Expect not fire")<<"\n"
+                            <<(y->get(i,j,c) ? "But fire" : "But not fire")<<std::endl;
  
                 }
                 assert(fabs(diff) < 0.001);
@@ -353,5 +353,34 @@ void print2DVectorToFile(vector<vector<int> >& v, string filename){
     }
     for(int i = 0; i < v.size(); i++){
         f_out<<v[i].size()<<endl;
+    }
+}
+
+//* read the dumped spikes from matlab code, only used for spiking CNN
+void readSpikesFromDumpfile(const std::string& filename, cuMatrix<bool>*& x){
+    FILE *file = fopen(filename.c_str(), "r");
+
+    char logStr[256];
+    if(file == NULL){
+        sprintf(logStr, "Cannot open file: %s", filename.c_str());  LOG(logStr, "Result/log.txt");
+        assert(0);
+    }
+ 
+    float val = 0;
+    for(int c = 0; c < x->channels; c++){
+        for(int i = 0; i < x->rows; i++){
+            for(int j = 0; j < x->cols; j++){
+                if(fscanf(file, "%f", &val) == EOF)
+                {
+                    sprintf(logStr, "Reading dumped spikes failed for %s @row: %d\t@col: %d\t@channel: %d\n", filename.c_str(), i, j, c);
+                    LOG(logStr, "Result/log.txt");
+                    assert(0);
+                }
+                if(val < 1)
+                    x->set(i, j, c, false);
+                else
+                    x->set(i, j, c, true);
+            }
+        }
     }
 }
