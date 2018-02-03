@@ -20,9 +20,7 @@ public:
 	void backpropagation(){};
     void verify(const std::string& phrase){};
 	void getGrad(){};
-    void getDeltaVth(){};
 	void updateWeight(){};
-    void updateVth(){};
 	void clearMomentum(){};
 
 	void calCost(){};
@@ -74,7 +72,8 @@ private:
     cuMatrixVector<float> processOutputs; // the raw samples after pre-processing (distortion)
     int myId; // use to asynchoronously load the data
 	int batch;
-    int imgSize; // size for the raw float images (mnist)
+    int inputSize;
+    int outputSize; 
 	cudaStream_t stream1;
 };
 #endif

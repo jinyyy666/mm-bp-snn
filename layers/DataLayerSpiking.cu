@@ -19,9 +19,9 @@ const curandRngType_t gen_t = CURAND_RNG_PSEUDO_DEFAULT;
 
 /*
  * dim3 block = dim3(batch, outputAmount);
- * dim3 thread= dim3(min(outputDim * endTime, 1024));
+ * dim3 thread= dim3(min(outputSize * endTime, 1024));
 */
-__global__ void g_dataLayer_spiking_feedforward(
+__global__ void g_DataLayerSpiking_feedforward(
 	bool** inputs,
 	bool* outputs,
     int outputArea,
@@ -32,26 +32,28 @@ DataLayerSpiking::DataLayerSpiking(std::string name){
     myId = 0;
 
     ConfigDataSpiking* config = (ConfigDataSpiking*)Config::instance()->getLayerByName(m_name);
-	inputDim  = config->m_inputNeurons;
-	outputDim = inputDim;
+	inputSize  = config->m_inputNeurons;
+	outputSize = inputSize;
     endTime   = Config::instance()->getEndTime();
 	batch     = Config::instance()->getBatchSize();
-    imgSize   = Config::instance()->getImageSize();
+
+    inputDim    = Config::instance()->getImageSize();
+    outputDim   = Config::instance()->getImageSize();
 	inputAmount = Config::instance()->getChannels();
 	outputAmount= inputAmount;
-	outputs = new cuMatrix<bool>(batch, endTime * outputDim, outputAmount);
-    outputs_time = new cuMatrix<int>(batch, outputDim * endTime, outputAmount);
+	outputs = new cuMatrix<bool>(batch, endTime * outputSize, outputAmount);
+    outputs_time = new cuMatrix<int>(batch, outputSize * endTime, outputAmount);
 
-    fireCount = new cuMatrix<int>(batch, outputDim, outputAmount);
+    fireCount = new cuMatrix<int>(batch, outputSize, outputAmount);
 
-    cu_randomNum = new cuMatrix<float>(batch, endTime * inputDim, 1);
+    cu_randomNum = new cuMatrix<float>(batch, endTime * inputSize, 1);
 
     bool has_distortion = Config::instance()->applyPreproc();
     for(int i = 0; i < 2; ++i){
         for(int j = 0; j < batch; j++){
-            batchSpeeches[i].push_back(new cuMatrix<bool>(endTime, inputDim, Config::instance()->getChannels()));
+            batchSpeeches[i].push_back(new cuMatrix<bool>(endTime, inputSize, Config::instance()->getChannels()));
             if(has_distortion){
-                batchSamplesFloat[i].push_back(new cuMatrix<float>(imgSize, imgSize, Config::instance()->getChannels()));
+                batchSamplesFloat[i].push_back(new cuMatrix<float>(outputDim, outputDim, Config::instance()->getChannels()));
             }
         }
         batchSpeeches[i].toGpu();
@@ -60,7 +62,7 @@ DataLayerSpiking::DataLayerSpiking(std::string name){
     }
     if(has_distortion){
         for(int i = 0; i < batch; ++i){
-            processOutputs.push_back(new cuMatrix<float>(imgSize, imgSize, Config::instance()->getChannels()));
+            processOutputs.push_back(new cuMatrix<float>(outputDim, outputDim, Config::instance()->getChannels()));
         }
         processOutputs.toGpu();
     }
@@ -82,20 +84,20 @@ DataLayerSpiking::DataLayerSpiking(std::string name){
 
 
 /*
- * dim3 block = dim3(batch, inputDim);
+ * dim3 block = dim3(batch, inputSize);
  * dim3 thread= dim3(min(1024, endTime));
 */
-__global__ void g_dataLayer_poissonCode(
+__global__ void g_DataLayerSpiking_poissonCode(
     float** preprocs,
     bool** inputs,
     float* _randoms,
     int batch,
-    int inputDim,
+    int inputSize,
     int endTime)
 {
     int batchId = blockIdx.x;
     int i_idx = blockIdx.y;
-    int speechSize = endTime * inputDim;
+    int speechSize = endTime * inputSize;
 
     float * random = _randoms + batchId * speechSize;
     float * preproc = preprocs[batchId];
@@ -105,19 +107,19 @@ __global__ void g_dataLayer_poissonCode(
     for(int t = 1; t < endTime; t += blockDim.x)
     {
         int time = t + threadIdx.x;
-        float r = random[time * inputDim + i_idx];
-        if(r < freq)    input[time * inputDim + i_idx] = true;
-        else    input[time * inputDim + i_idx] = false;
+        float r = random[time * inputSize + i_idx];
+        if(r < freq)    input[time * inputSize + i_idx] = true;
+        else    input[time * inputSize + i_idx] = false;
     }
 
 }
 
 /*
  * dim3 block = dim3(batch, outputAmount);
- * dim3 thread= dim3(min(outputDim * endTime, 1024));
+ * dim3 thread= dim3(min(outputSize * endTime, 1024));
 */
 
-__global__ void g_dataLayer_spiking_feedforward(
+__global__ void g_DataLayerSpiking_feedforward(
 	bool** inputs,
 	bool* outputs,
     int outputArea,
@@ -140,25 +142,25 @@ __global__ void g_dataLayer_spiking_feedforward(
 
 /*
  * dim3 block = dim3(batch);
- * dim3 thread= dim3(min(outputDim, 1024));
+ * dim3 thread= dim3(min(outputSize, 1024));
 */
-__global__ void g_dataLayer_get_fireCount(
+__global__ void g_DataLayerSpiking_get_fireCount(
     bool* outputs,
     int* batchfireCount,
-    int outputDim,
+    int outputSize,
     int endTime)
 {
 	int batchId = blockIdx.x;
 
-    bool* output = outputs + batchId * endTime * outputDim;
-    int* fireCount = batchfireCount + batchId * outputDim;
+    bool* output = outputs + batchId * endTime * outputSize;
+    int* fireCount = batchfireCount + batchId * outputSize;
 
-    for(int i = 0; i < outputDim; i += blockDim.x)
+    for(int i = 0; i < outputSize; i += blockDim.x)
     {
         int o_idx = i + threadIdx.x;
-        if(o_idx < outputDim){
+        if(o_idx < outputSize){
             int sum = 0;
-            for(int time = 0; time < endTime; ++time)   sum += output[o_idx + time * outputDim];
+            for(int time = 0; time < endTime; ++time)   sum += output[o_idx + time * outputSize];
             fireCount[o_idx] = sum;
         }
     }
@@ -168,9 +170,9 @@ __global__ void g_dataLayer_get_fireCount(
 //* simply copy the input data to the output
 void DataLayerSpiking::feedforward(){
 	dim3 block = dim3(batch, outputAmount);
-	dim3 thread= dim3(min(outputDim * endTime, 1024));
+	dim3 thread= dim3(min(outputSize * endTime, 1024));
 	
-	g_dataLayer_spiking_feedforward<<<block, thread>>>(
+	g_DataLayerSpiking_feedforward<<<block, thread>>>(
 		batchSpeeches[myId].m_devPoint, 
 		outputs->getDev(),
 		outputs->getArea(),
@@ -179,21 +181,21 @@ void DataLayerSpiking::feedforward(){
 	getLastCudaError("DataLayerSpiking:feedforward");
 
     //* get the fire counts for transforming the binary response to spike times    
-    thread = dim3(min(outputDim, 1024));
-    g_dataLayer_get_fireCount<<<block, thread>>>(
+    thread = dim3(min(outputSize, 1024));
+    g_DataLayerSpiking_get_fireCount<<<block, thread>>>(
         outputs->getDev(),
         fireCount->getDev(),
-        outputDim,
+        outputSize,
         endTime);
 	checkCudaErrors(cudaStreamSynchronize(0));
-	getLastCudaError("DataLayerSpiking:g_dataLayer_get_fireCount");
+	getLastCudaError("DataLayerSpiking:g_DataLayerSpiking_get_fireCount");
     
 
     g_response_2_spiketime<<<block, thread>>>(
         outputs->getDev(),
         outputs_time->getDev(),
         outputs->getArea(),
-        outputDim,
+        outputSize,
         endTime);
     checkCudaErrors(cudaStreamSynchronize(0));
 	getLastCudaError("DataLayerSpiking:g_response_2_spiketime");
@@ -216,14 +218,14 @@ void DataLayerSpiking::getBatchSpikesWithPreproc(cuMatrixVector<bool>& inputs, i
         this->batchSpeeches[id][i]->toGpu(this->stream1);
     }
     // apply the distortation
-    cuApplyDistortion(batchSamplesFloat[id].m_devPoint, processOutputs.m_devPoint, batch, imgSize); 
+    cuApplyDistortion(batchSamplesFloat[id].m_devPoint, processOutputs.m_devPoint, batch, outputDim); 
 
     // map the distorted samples to spike times
-    g_dataLayer_poissonCode<<<dim3(batch, inputDim), dim3(min(1024, endTime))>>>(processOutputs.m_devPoint, batchSpeeches[id].m_devPoint, cu_randomNum->getDev(), batch, inputDim, endTime);
+    g_DataLayerSpiking_poissonCode<<<dim3(batch, inputSize), dim3(min(1024, endTime))>>>(processOutputs.m_devPoint, batchSpeeches[id].m_devPoint, cu_randomNum->getDev(), batch, inputSize, endTime);
     /* // do the same thing by CPU
     for(size_t i = 0; i < this->processOutputs.size(); i++){
         processOutputs[i]->toCpu();
-        convertToSpikeTimes(processOutputs[i], inputs[i+start]->getSpikeTimes(), imgSize, endTime);
+        convertToSpikeTimes(processOutputs[i], inputs[i+start]->getSpikeTimes(), outputDim, endTime);
     }
     */
     // show the distorted image
