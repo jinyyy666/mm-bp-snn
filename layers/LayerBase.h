@@ -62,10 +62,9 @@ public:
     virtual cuMatrix<bool>* getSpikingOutputs() = 0;
     virtual cuMatrix<int>*  getSpikingTimeOutputs() = 0;
 	virtual void printFireCount() = 0;
-    virtual void getDeltaVth() = 0;
-    virtual void updateVth() = 0;
     virtual void setPredict(int * p) = 0;
     virtual void setSampleWeight(float* s_weights) = 0;
+    virtual void verify(const std::string& phrase) = 0;
 	int inputDim;
 	int outputDim;
     int endTime;
