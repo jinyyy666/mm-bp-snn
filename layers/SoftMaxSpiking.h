@@ -35,6 +35,8 @@ public:
     cuMatrix<bool>* getSpikingOutputs(){return NULL;}
     cuMatrix<int>* getSpikingTimeOutputs(){return NULL;}
     cuMatrix<int>* getFireCount(){return NULL;}
+    
+    void verify(const std::string& phrase){};
 
 	virtual void printParameter(){
 		char logStr[1024];
@@ -64,8 +66,6 @@ public:
 		sprintf(logStr, "softmax output: %f, %f, %f, %f, %f, %f, %f, %f, %f, %f;\n", outputs->get(0,0,0), outputs->get(0,1,0), outputs->get(0,2,0), outputs->get(0,3,0), outputs->get(0,4,0), outputs->get(0,5,0), outputs->get(0,6,0), outputs->get(0,7,0), outputs->get(0,8,0), outputs->get(0,9,0));
 		LOG(logStr, "Result/log.txt");
     }
-    void getDeltaVth(){}
-    void updateVth(){}
 
 private:
 	cuMatrix<int>*   inputs;
