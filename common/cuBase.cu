@@ -182,7 +182,7 @@ __global__ void g_sgd_vecAdd(float** momentum_w, float** _wgrad, float** _w, int
     float* w     = _w[ok];
     float* wgrad = _wgrad[ok];
     int idx = threadIdx.x;
-    for(int i = 0; i < lenw; i += blockDim.x * gridDim.x)
+    for(int i = 0; i < lenw; i += blockDim.x)
     {
         int id = i + idx;
         if(id < lenw)
@@ -206,13 +206,61 @@ __global__ void g_adam_vecAdd(float** g1_ws, float** g2_ws, float* b1_t, float* 
     float* w     = _w[ok];
     float* wgrad = _wgrad[ok];
     int idx = threadIdx.x;
-    float b1t = b1_t[0];
-    float b2t = b2_t[0];
+    float b1t = b1_t[ok];
+    float b2t = b2_t[ok];
     const float b1 = 0.9f;
     const float b2 = 0.999f;
     const float eps = 1.e-8f;
     __syncthreads();
 
+    for(int i = 0; i < lenw; i += blockDim.x)
+    {
+        int id = i + idx;
+        if(id < lenw)
+        {
+            float weight_grad = wgrad[id];
+            float g1 = b1 * g1_w[id] + (1 - b1) * weight_grad;
+            float g2 = b2 * g2_w[id] + (1 - b2) * weight_grad * weight_grad;
+            w[id]  -= lr * (g1/(1.f - b1t)) / ((float)sqrtf(g2/(1. - b2t)) + eps);
+            g1_w[id] = g1;
+            g2_w[id] = g2;
+        }
+    }
+    if(threadIdx.x == 0){
+        b1_t[ok] *= b1;
+        b2_t[ok] *= b2;
+    }
+}
+
+/* Use this function when outputAmount = 1
+ * block  = dim3(min((w->getLen() + 255)/256, 5120))
+ * thread = dim3(256)
+ */
+__global__ void g_sgd_vecAdd(float* v_w, float* wgrad, float* w, int lenw, float momentum, float lr)
+{
+   int idx = blockDim.x * blockIdx.x + threadIdx.x;
+   for(int i = 0; i < lenw; i += blockDim.x * gridDim.x)
+   {
+       int id = i + idx;
+       if(id < lenw)
+       {
+           v_w[id] = v_w[id] * momentum + wgrad[id] * lr;
+           w[id]  -= v_w[id];
+       }
+   }
+}
+
+/* Use this function when outputAmount = 1
+ * block  = dim3(min((w->getLen() + 255)/256, 5120))
+ * thread = dim3(256)
+ */
+__global__ void g_adam_vecAdd(float* g1_w, float* g2_w, float b1t, float b2t, float* wgrad, float* w, int lenw, float lr)
+{
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    const float b1 = 0.9f;
+    const float b2 = 0.999f;
+    const float eps = 1.e-8f;
+    
     for(int i = 0; i < lenw; i += blockDim.x * gridDim.x)
     {
         int id = i + idx;
@@ -226,12 +274,7 @@ __global__ void g_adam_vecAdd(float** g1_ws, float** g2_ws, float* b1_t, float* 
             g2_w[id] = g2;
         }
     }
-    if(threadIdx.x == 0 && ok == 0){
-        b1_t[0] = b1t * b1;
-        b2_t[0] = b2t * b2;
-    }
 }
-
 
 __global__ void g_getCost_3(float* cost,
 	float** weight,
@@ -413,8 +456,9 @@ __global__ void g_getCost_2(float* cost,
 
 
 /*
-function: g_preDeltaFormat
-threads : <<<dim3(batch), dim3(512)>>> 
+* function: cuMatrix(batch, channel * size, 1) to cuMatrix(batch, size, channel)
+* blocks  : dim3(batch)
+* threads : dim3(min(512, size * channels))
 */
 __global__ void g_preDeltaFormat(float* cuPoolFlDelta, 
 	float* cuPoolDelta, int batch, int size, int channels){
@@ -432,7 +476,7 @@ __global__ void g_preDeltaFormat(float* cuPoolFlDelta,
 
 
 /*
-* function: cuMatrix(batch, size, channel) to cuMatrix(batch, size * channel, 1)
+* function: cuMatrix(batch, size, channel) to cuMatrix(batch, channel * size, 1)
 * blocks  : dim3(batch)
 * threads : dim3(min(512, cuPool[poolidx]->cols))
 */
@@ -449,22 +493,85 @@ __global__ void g_convert(float* cuPool, float*cuPoolToFlActi, int batch, int si
 	}
 }
 
+/*
+* 
+* function: cuMatrix<int>*(batch, inputDim2*endTime, amount) 
+*           to cuMatrix<int>*(batch, amount*inputDim2*endTime, 1)
+* Notice that the inputDim is the one dim of the image if amount > 1 (CNN case for img)
+*
+*   inputSize = amount * inputDim*inputDim
+*   inputCols = endTime * inputDim*inputDim
+*    channels = amount
+*
+* blocks  : dim3(batch, endTime)
+* threads : dim3(min(1024, inputSize))
+*/
+__global__ void g_convert_spiketimes(int* inputs_time, int* fireCounts, int fireArea, int endTime, int inputSize, int inputCols, int channels, int batch, int* inputs_tf){
+    int b = blockIdx.x;
+    int t = blockIdx.y;
+    int inputDim2 = inputCols / endTime;
+    for(int i = 0; i < inputSize; i += blockDim.x){
+        int i_idx = i + threadIdx.x;
+        if(i_idx < inputSize){
+            int s = i_idx / channels;
+            int c = i_idx % channels;
+            int f_cnt = fireCounts[c * fireArea + b * inputDim2 + s];
+            if(t >= f_cnt)
+                return;
+            int index = c * batch * inputCols + b * inputCols + s*endTime + t;
+            inputs_tf[b * inputCols * channels + c*inputCols + s*endTime+ t] = inputs_time[index];
+        }
+    }
+}
 
 /*
 * 
-* function: cuMatrix<bool>*(batch, endTime*inputDim) to cuMatrix<float>*(inputDim, endTime*batch)
-* blocks  : dim3(batch, endTime)
-* threads : dim3(min(1024, inputDim))
+* function: cuMatrix<int>*(batch, inputDim2, amount) 
+*           to cuMatrix<int>*(batch, amount*inputDim2, 1)
+* Notice that the inputDim is the one dim of the image if amount > 1 (CNN case for img)
+*
+*   inputSize = amount * inputDim*inputDim
+*   inputDim2 = inputDim*inputDim
+*    channels = amount
+*
+* blocks  : dim3(batch)
+* threads : dim3(min(1024, inputSize))
 */
-__global__ void g_cast_bool_2_float(bool* inputs, int endTime, int inputDim, int batch, float* inputs_f){
+__global__ void g_convert_firecounts(int* counts, int area, int inputSize, int inputDim2, int channels, int batch, int* counts_f){
+    int b = blockIdx.y;
+    for(int i = 0; i < inputSize; i += blockDim.x){
+        int i_idx = i + threadIdx.x;
+        if(i_idx < inputSize){
+            int s = i_idx / channels;
+            int c = i_idx % channels;
+            counts_f[b*inputDim2*channels + c*inputDim2 + s] = counts[c*area + b*inputDim2 + s];
+        }
+    } 
+}
+/*
+* 
+* function: cuMatrix<bool>*(batch, endTime*inputDim*inputDim, amount) 
+*           to cuMatrix<bool>*(inputSize, endTime*batch, 1)
+* Notice that the inputDim is the one dim of the image if amount > 1 (CNN case for img)
+*
+*   inputSize = amount * inputDim*inputDim
+*   inputCols = endTime * inputDim*inputDim
+*    channels = amount
+*
+* blocks  : dim3(batch, endTime)
+* threads : dim3(min(1024, inputSize))
+*/
+__global__ void g_cast_bool_2_float(bool* inputs, int endTime, int inputSize, int inputCols, int channels, int batch, float* inputs_f){
 	int b   = blockIdx.x;
     int t   = blockIdx.y;
-    int inputSize2 = endTime * inputDim;
-    bool* input = inputs + b * inputSize2;
-	for(int i = 0; i < inputDim; i += blockDim.x){
+    int inputDim2 = inputCols / endTime;
+	for(int i = 0; i < inputSize; i += blockDim.x){
 		int i_idx = i + threadIdx.x;
-		if(i_idx < inputDim){
-            inputs_f[i_idx * endTime * batch + t * batch + b] = input[i_idx + t * inputDim];
+		if(i_idx < inputSize){
+            int s = i_idx / channels; // the index for inputDim2, within the same channel
+            int c = i_idx % channels;
+            int index = c * batch * inputCols + b * inputCols + t * inputDim2 + s;
+            inputs_f[(c * inputDim2 + s) * endTime * batch + t * batch + b] = inputs[index];
 		}
 	}
 }
@@ -472,14 +579,14 @@ __global__ void g_cast_bool_2_float(bool* inputs, int endTime, int inputDim, int
 
 /*
 * 
-* function: cuMatrix<float>*(outputDim, endTime*batch) to cuMatrix<float>*(batch, outputDim*endTime)
-* blocks  : dim3(batch, outputDim)
+* function: cuMatrix<float>*(outputSize, endTime*batch) to cuMatrix<float>*(batch, outputSize*endTime)
+* blocks  : dim3(batch, outputSize)
 * threads : dim3(min(1024, endTime))
 */
-__global__ void g_transform_2_batch(float* inputs_rt, int endTime, int outputDim, int batch, float* inputs_r){
+__global__ void g_transform_2_batch(float* inputs_rt, int endTime, int outputSize, int batch, float* inputs_r){
 	int b     = blockIdx.x;
     int o_idx = blockIdx.y;
-    int size2 = outputDim * endTime;
+    int size2 = outputSize * endTime;
     float* input_r = inputs_r + b * size2;
 	for(int t = 0; t < endTime; t += blockDim.x){
 		int time = t + threadIdx.x;
@@ -490,27 +597,27 @@ __global__ void g_transform_2_batch(float* inputs_rt, int endTime, int outputDim
 }
 
 /*
-* function: transform the binary response matrix (batch, outputDim * endTime, outputAmount) 
-* to spike times matrix (batch, outputDim * "num of spikes", outputAmount),directly store the spike times. 
+* function: transform the binary response matrix (batch, outputSize * endTime, outputAmount) 
+* to spike times matrix (batch, outputSize*"num of spikes", outputAmount),directly store the spike times. 
 * blocks  : dim3(batch, outputAmount)
-* threads : dim3(min(1024, outputDim))
+* threads : dim3(min(1024, outputSize))
 */
-__global__ void g_response_2_spiketime(bool* outputs, int* outputs_time, int outputArea, int outputDim, int endTime)
+__global__ void g_response_2_spiketime(bool* outputs, int* outputs_time, int outputArea, int outputSize, int endTime)
 {
     int batchId = blockIdx.x;
     int ok = blockIdx.y;
-    bool* output = outputs + ok * outputArea + batchId * endTime * outputDim;
-    int* output_time = outputs_time + ok * outputArea + batchId * endTime * outputDim;
+    bool* output = outputs + ok * outputArea + batchId * endTime * outputSize;
+    int* output_time = outputs_time + ok * outputArea + batchId * endTime * outputSize;
 
-    for(int i = 0; i < outputDim; i += blockDim.x)
+    for(int i = 0; i < outputSize; i += blockDim.x)
     {
         int o_idx = i + threadIdx.x;
-        if(o_idx < outputDim)
+        if(o_idx < outputSize)
         {
             int col_idx = 0;
             for(int time = 0; time < endTime; ++time)
             {
-                if(output[o_idx + time * outputDim])
+                if(output[o_idx + time * outputSize])
                 {
                     output_time[o_idx * endTime + col_idx] = time;
                     col_idx++;

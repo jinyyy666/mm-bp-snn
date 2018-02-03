@@ -28,9 +28,11 @@ __global__ void g_getBgrad(float* softMaxDelta, float* bgrad, float* dropb, int 
 __global__ void g_getBgrad(float* softMaxDelta, float* bgrad, int batch);
 
 __global__ void g_sgd_vecAdd(float** v_m, float** wgrad, float** w, int lenw, float momentum, float lr);
-__global__ void g_adam_vecAdd(float** g1_ws, float** g2_ws, float*  b1_t, float*  b2_t, float** _wgrad, float** _w, int lenw, float lr);
+__global__ void g_adam_vecAdd(float** g1_ws, float** g2_ws, float* b1_t, float* b2_t, float** _wgrad, float** _w, int lenw, float lr);
 
-
+// Use these two functions when outputAmount = 1
+__global__ void g_sgd_vecAdd(float* v_w, float* wgrad, float* w, int lenw, float momentum, float lr);
+__global__ void g_adam_vecAdd(float* g1_w, float* g2_w, float b1t, float b2t, float* wgrad, float* w, int lenw, float lr);
 
 __global__ void g_getCost_3(float* cost,
 	float** weight,
@@ -51,15 +53,28 @@ __global__ void g_getCost_1(float* softMaxP,
 __global__ void g_convert(float* cuPool, float*cuPoolToFlActi, int batch, int size, int channel);
 
 
-/*
-* 
-* function: cuMatrix<bool>*(batch, endTime*inputDim) to cuMatrix<float>*(inputDim, endTime*batch)
-* blocks  : dim3(batch)
-* threads : dim3(min(1024, inputDim))
-*/
-__global__ void g_cast_bool_2_float(bool* inputs, int endTime, int inputDim, int batch, float* inputs_f);
+/* function: cuMatrix<int>*(batch, inputDim2*endTime, amount) 
+ *           to cuMatrix<int>*(batch, amount*inputDim2*endTime, 1)
+ */
+__global__ void g_convert_spiketimes(int* inputs_time, int* fireCounts, int fireArea, int endTime, int inputSize, int inputCols, int channels, int batch, int* inputs_tf);
+__global__ void g_convert_firecounts(int* counts, int area, int inputSize, int inputDim2, int channels, int batch, int* counts_f);
 
-__global__ void g_transform_2_batch(float* inputs_rt, int endTime, int outputDim, int batch, float* inputs_r);
+
+/*
+* function: cuMatrix<bool>*(batch, endTime*inputDim*inputDim, amount) 
+*           to cuMatrix<float>*(inputSize, endTime*batch, 1)
+* blocks  : dim3(batch, endTime)
+* threads : dim3(min(1024, inputSize))
+*/
+__global__ void g_cast_bool_2_float(bool* inputs, int endTime, int inputSize, int inputCols, int channels, int batch, float* inputs_f);
+
+
+/*
+* function: cuMatrix<float>*(outputSize, endTime*batch) to cuMatrix<float>*(batch, outputSize*endTime)
+* blocks  : dim3(batch, outputSize)
+* threads : dim3(min(1024, endTime))
+*/
+__global__ void g_transform_2_batch(float* inputs_rt, int endTime, int outputSize, int batch, float* inputs_r);
 
 /*
 function: g_preDeltaFormat
