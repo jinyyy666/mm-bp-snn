@@ -16,8 +16,11 @@ public:
         delete inputs_resp;
         delete inputs_float;
         delete inputs_resp_tmp;
+        delete inputs_time_format;
 		delete outputs;
         delete curDelta;
+        delete preDelta_format;
+        delete preFireCount_format;
         delete fireCount;
         delete accEffect;
         delete weightSqSum;
@@ -25,8 +28,19 @@ public:
         delete effectRatio;
         delete maxCount;
         delete groundTruth;
-        delete b1_t;
-        delete b2_t;
+        delete w;
+        delete b;
+        delete wgrad;
+        delete bgrad;
+        delete wgradTmp;
+        delete bgradTmp;
+        delete w_laterial;
+        delete momentum_w;
+        delete momentum_b;
+        delete g1_w;
+        delete g1_b;
+        delete g2_w;
+        delete g2_b;
 	}
 
 
@@ -34,9 +48,7 @@ public:
 	void backpropagation();
     void verify(const std::string& phrase);
 	void getGrad();
-    void getDeltaVth();
 	void updateWeight();
-    void updateVth();
 	void clearMomentum();
 	void calCost();
     void loadRef();
@@ -46,8 +58,8 @@ public:
     void initLaterial();
     void initLocalInhibition(float strength);
 	void initFromCheckpoint(FILE* file);
-    void initBiasFromDumpfile(const std::string& filename, cuMatrixVector<float>& cuW);
-    void initFromDumpfile(const std::string& filename, cuMatrixVector<float>& cuW);
+    void initBiasFromDumpfile(const std::string& filename, cuMatrix<float>*& cuW);
+    void initFromDumpfile(const std::string& filename, cuMatrix<float>*& cuW);
 	void save(FILE* file);
 
     cuMatrix<int>* getFireCount(){
@@ -68,16 +80,12 @@ public:
 		return curDelta;
 	}
 
-	int getOutputAmount(){
-		return outputAmount;
+	int getInputSize(){
+		return inputSize;
 	}
 
-	int getInputDim(){
-		return inputDim;
-	}
-
-	int getOutputDim(){
-		return outputDim;
+	int getOutputSize(){
+		return outputSize;
 	}
     
     void setPredict(int* p){
@@ -92,12 +100,12 @@ public:
 		char logStr[1024];
 		sprintf(logStr, "%s:\n",m_name.c_str());
 		LOG(logStr, "Result/log.txt");
-		w[0]->toCpu();
-		sprintf(logStr, "weight:%f, %f, %f;\n", w[0]->get(0,0,0), w[0]->get(0,1,0), w[0]->get(0, 2, 0));
+		w->toCpu();
+		sprintf(logStr, "weight:%f, %f, %f;\n", w->get(0,0,0), w->get(0,1,0), w->get(0, 2, 0));
 		LOG(logStr, "Result/log.txt");
         
-		b[0]->toCpu();
-		sprintf(logStr, "bias  :%f\n", b[0]->get(0,0,0));
+		b->toCpu();
+		sprintf(logStr, "bias  :%f\n", b->get(0,0,0));
 		LOG(logStr, "Result/log.txt");
         
 	}
@@ -114,9 +122,11 @@ public:
 private:
 	cuMatrix<bool>*   inputs;
 	cuMatrix<float>*  preDelta;
+	cuMatrix<float>*  preDelta_format; //preDelta(batch, size, channel) --> (batch, size * channel)
 	cuMatrix<bool>*   outputs;
 	cuMatrix<float>*  curDelta; // size(curDelta) == size(fireCount)
     cuMatrix<int>*    inputs_time;
+    cuMatrix<int>*    inputs_time_format;
     cuMatrix<int>*    outputs_time;
     cuMatrix<float>*  inputs_resp;
     cuMatrix<float>*  inputs_resp_tmp;
@@ -126,21 +136,17 @@ private:
     cuMatrix<int>*   maxCount;
     cuMatrix<float>* groundTruth;
     cuMatrix<int>*   preFireCount;
+    cuMatrix<int>*   preFireCount_format; //preFireCount(batch, size, channel)->(batch, size*channel)
     cuMatrix<float>* accEffect;
 
     cuMatrix<float>* weightSqSum;
     cuMatrix<float>* lateralFactor;
     cuMatrix<float>* effectRatio;
 
-    cuMatrix<float>* vth;
-    cuMatrix<float>* vthDelta;
-    cuMatrix<float>* vthDeltaTmp;
-
-    cuMatrix<float>* b1_t;
-    cuMatrix<float>* b2_t;
-
     int * predict;
     float * sample_weights;
+    int inputSize;
+    int outputSize;
 	int batch;
     int T_REFRAC;
     float threshold;
@@ -154,23 +160,25 @@ private:
     float DESIRED_LEVEL;
     float MARGIN;
 private:
-	cuMatrixVector<float> w;
-	cuMatrixVector<float> wgrad;
-	cuMatrixVector<float> wgradTmp;
-    cuMatrixVector<float> w_laterial;
-	cuMatrixVector<float> b;
-	cuMatrixVector<float> bgrad;
-    cuMatrixVector<float> bgradTmp;
-	cuMatrixVector<float> momentum_w;
-	cuMatrixVector<float> momentum_b;
-	cuMatrixVector<float> g1_w;
-	cuMatrixVector<float> g1_b;
-	cuMatrixVector<float> g2_w;
-	cuMatrixVector<float> g2_b;
+	cuMatrix<float>* w;
+	cuMatrix<float>* wgrad;
+	cuMatrix<float>* wgradTmp;
+    cuMatrix<float>* w_laterial;
+	cuMatrix<float>* b;
+	cuMatrix<float>* bgrad;
+    cuMatrix<float>* bgradTmp;
+	cuMatrix<float>* momentum_w;
+	cuMatrix<float>* momentum_b;
+	cuMatrix<float>* g1_w;
+	cuMatrix<float>* g1_b;
+	cuMatrix<float>* g2_w;
+	cuMatrix<float>* g2_b;
+    float b1_t;
+    float b2_t;
 
-    cuMatrixVector<float> w_ref;
-    cuMatrixVector<float> w_laterial_ref;
-    cuMatrixVector<float> b_ref;
+    cuMatrix<float>* w_ref;
+    cuMatrix<float>* w_laterial_ref;
+    cuMatrix<float>* b_ref;
     cuMatrixVector<bool>   output_train_ref;
     cuMatrixVector<bool>   output_test_ref;
 };

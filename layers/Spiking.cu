@@ -14,8 +14,8 @@
  *
 */
 __device__ float d_Spiking_accumulate_spikes(
-    int inputDim,
-    int outputDim,
+    int inputSize,
+    int outputSize,
     float* input_resp,
     bool* output,
     int o_idx,
@@ -35,8 +35,8 @@ __device__ float d_Spiking_gradient(
     float delta,
     int o_idx,
     int i_idx,
-    int outputDim,
-    int inputDim,
+    int outputSize,
+    int inputSize,
     int endTime,
     int T_REFRAC,
     float TAU_M,
@@ -54,8 +54,8 @@ __device__ float d_Spiking_gradient_spiketime(
     int o_idx,
     int i_idx,
     float lat_factor,
-    int outputDim,
-    int inputDim,
+    int outputSize,
+    int inputSize,
     int endTime,
     int T_REFRAC,
     float TAU_M,
@@ -70,18 +70,12 @@ __device__ float d_Spiking_bias_gradient_spiketime(
     float delta,
     int o_idx,
     int dummyFreq,
-    int outputDim,
+    int outputSize,
     int endTime,
     int T_REFRAC,
     float TAU_M,
     float TAU_S);
 
-
-/*
- * dim3 block = dim3(1);
- * dim3 thread= dim3(256);
- */
-__global__ void g_weight_cp_test(float** ws, int nrows, int ncols);
     
 /*
  * dim3 block = dim3(1);
@@ -111,7 +105,7 @@ __global__ void g_getDelta_output(
 
 /*
  * dim3 block = dim3(batch);
- * dim3 thread= dim3(outputDim);
+ * dim3 thread= dim3(outputSize);
  */
 __global__ void g_boostWeight_output(
     float* outputDelta,
@@ -120,8 +114,8 @@ __global__ void g_boostWeight_output(
 
 
 /*
- * dim3 block = dim3(batch, outputDim);
- * dim3 thread= min(1024, outputDim);
+ * dim3 block = dim3(batch, outputSize);
+ * dim3 thread= min(1024, outputSize);
  */
 __global__ void g_getLateralFactor_output(
     int* outputs_time,
@@ -130,7 +124,7 @@ __global__ void g_getLateralFactor_output(
     int* y,
     float* batchLFactor,
     float vth,
-    int outputDim,
+    int outputSize,
     int endTime,
     int T_REFRAC,
     float TAU_M,
@@ -138,7 +132,7 @@ __global__ void g_getLateralFactor_output(
   
 /*
  * dim3 block = dim3(batch);
- * dim3 thread= dim3(min(1024, outputDim));
+ * dim3 thread= dim3(min(1024, outputSize));
  */
 __global__ void g_getMaxCount(
     int* fireCount,
@@ -147,7 +141,7 @@ __global__ void g_getMaxCount(
 
 /*
  * dim3 block = dim3(batch);
- * dim3 thread= dim3(min(1024, outputDim));
+ * dim3 thread= dim3(min(1024, outputSize));
  */
 __global__ void g_modifySpikes(
     bool* outputs,
@@ -155,48 +149,48 @@ __global__ void g_modifySpikes(
     int* fireCount,
     int target_level,
     int endTime,
-    int outputDim);
+    int outputSize);
 
 
 /*
- * dim3 block = dim3(batch, inputDim, outputAmount);
- * dim3 thread= min(1024, outputDim);
+ * dim3 block = dim3(batch, inputSize);
+ * dim3 thread= min(1024, outputSize);
  */
 __global__ void g_Spiking_wgrad(
         bool* inputs,
         bool* outputs,
         float* curDelta,
-        float** wgradTmp,
-        int inputDim,
-        int outputDim,
+        float* wgradTmp,
+        int inputSize,
+        int outputSize,
         int endTime,
         int T_REFRAC,
         float TAU_M,
         float TAU_S);
 
 /*
- * dim3 block = dim3(batch, inputDim, outputAmount);
- * dim3 thread= min(1024, outputDim);
+ * dim3 block = dim3(batch, inputSize);
+ * dim3 thread= min(1024, outputSize);
  */
 __global__ void g_Spiking_wgrad_spiketime(
         float* batchAccEffect,
         float* curDelta,
         float* latFactors,
-        float** wgradTmp,
-        int inputDim,
-        int outputDim);
+        float* wgradTmp,
+        int inputSize,
+        int outputSize);
 
 
 /*
- * dim3 block = dim3(outputDim);
+ * dim3 block = dim3(outputSize);
  * dim3 thread= dim3(batch);
  */
 __global__ void g_Spiking_bgrad_spiketime(
         int* outputs_time,
         int* batchFireCount,
         float* curDelta,
-        float** bgradTmp,
-        int outputDim,
+        float* bgradTmp,
+        int outputSize,
         int endTime,
         int dummyFreq,
         int T_REFRAC,
@@ -205,25 +199,25 @@ __global__ void g_Spiking_bgrad_spiketime(
 
 
 /*
- * block = dim3(outputDim * inputDim, outputAmount);
+ * block = dim3(outputSize * inputSize);
  * thread= dim3(batch);
 */
 __global__ void g_Spiking_gradAdd(
-	float** _WgradTmp,
-	float** Wgrad,
-	float** w,
+	float* wgradTmp,
+	float* wgrad,
+	float* w,
     float* w_sq_sum,
 	int batch,
 	float lambda,
     float beta,
     float limit,
-    int inputDim,
+    int inputSize,
 	int wArea);
 
 
 /*
- * dim3 block = dim3(batch, inputDim, outputAmount);
- * dim3 thread= min(1024, outputDim);
+ * dim3 block = dim3(batch, inputSize);
+ * dim3 thread= min(1024, outputSize);
  */
 __global__ void g_Spiking_synaptic_effect(
         int* inputs_time,
@@ -233,8 +227,8 @@ __global__ void g_Spiking_synaptic_effect(
         float* w,
         float* batchAccEffect,
         float* effectRatio,
-        int inputDim,
-        int outputDim,
+        int inputSize,
+        int outputSize,
         int endTime,
         int T_REFRAC,
         float TAU_M,
@@ -243,20 +237,18 @@ __global__ void g_Spiking_synaptic_effect(
 
 /*
  *	blocks : dim3(batch, div),
- *	threads: dim3(min(outputDim, 1024), 1);
+ *	threads: dim3(min(outputSize, 1024), 1);
  */
 __global__ void g_Spiking_feedforward(
     float* inputs_resp,
-	float** ws,
-    float** ws_lat,
-    float** bs,
+	float* w,
+    float* ws_lat,
+    float* b,
 	bool*  outputs,
     int*    fireCount,
-	int inputDim,
-	int outputDim,
+	int inputSize,
+	int outputSize,
     int endTime,
-	int inputAmount,
-	int outputAmount,
     float vth,
     int dummyFreq,
     int T_REFRAC,
@@ -265,16 +257,16 @@ __global__ void g_Spiking_feedforward(
 
 
 /*
- * dim3 block = dim3(batch, inputDim);
- * dim3 thread= min(1024, outputDim);
+ * dim3 block = dim3(batch, inputSize);
+ * dim3 thread= min(1024, outputSize);
  */
 __global__ void g_Spiking_debug_spiketime(
     int* inputs_time,
     int* outputs_time,
     int* batchPreFireCount,
     int* batchFireCount,
-    int inputDim,
-    int outputDim,
+    int inputSize,
+    int outputSize,
     int endTime);
 
 
@@ -306,33 +298,31 @@ void Spiking::feedforward()
         exit(0);
     }
 
-    int remain = min(1024 / outputDim, outputAmount); //1
-    dim3 thread= dim3(1024, remain);
+    // fast input response
+    g_cast_bool_2_float<<<dim3(batch, endTime), min(1024, inputSize)>>>(inputs->getDev(), endTime, inputSize, inputs->cols, inputs->channels, batch, inputs_float->getDev());
+    matrixMul(w, inputs_float, inputs_resp_tmp); //input_resp_tmp rows:outputSize; cols:endTime*batch
+    g_transform_2_batch<<<dim3(batch, outputSize), min(1024, endTime)>>>(inputs_resp_tmp->getDev(), endTime, outputSize, batch, inputs_resp->getDev());
 
-    int div = (outputAmount + remain - 1) / remain;//1
-    dim3 block = dim3(batch, div);
-    float ** w_lat_dev = (w_laterial.empty()? NULL : w_laterial.m_devPoint);
+    // convert (batch, inputDim2*endTime, amount) to (batch, amount*inputDim2*endTime, 1)
+    g_convert_spiketimes<<<dim3(batch, endTime), min(1024, inputSize)>>>(inputs_time->getDev(), preFireCount->getDev(), preFireCount->getArea(), endTime, inputSize, inputs_time->cols, inputs_time->channels, batch, inputs_time_format->getDev());
+    // convert (batch, inputDim2, amount) to (batch, amount*inputDim2, 1)
+    g_convert_firecounts<<<dim3(batch), min(1024, inputSize)>>>(preFireCount->getDev(), preFireCount->getArea(), inputSize, preFireCount->cols, preFireCount->channels, batch, preFireCount_format->getDev());
 
+    dim3 thread= dim3(min(1024, outputSize));
+    dim3 block = dim3(batch);
     ConfigSpiking * config = (ConfigSpiking*) Config::instance()->getLayerByName(m_name); 
     int dummyFreq = config->getBiasFreq();
 
-    // fast input response
-    g_cast_bool_2_float<<<dim3(batch, endTime), min(1024, inputDim)>>>(inputs->getDev(), endTime, inputDim, batch, inputs_float->getDev());
-    matrixMul(w[0], inputs_float, inputs_resp_tmp); // input_resp_tmp: outputDim * endTime * batch
-    g_transform_2_batch<<<dim3(batch, outputDim), min(1024, endTime)>>>(inputs_resp_tmp->getDev(), endTime, outputDim, batch, inputs_resp->getDev());
-
     g_Spiking_feedforward<<<block, thread>>>(
             inputs_resp->getDev(),
-            w.m_devPoint,
-            w_lat_dev,
-            b.m_devPoint,
+            w->getDev(),
+            w_laterial == NULL ? NULL : w_laterial->getDev(),
+            b->getDev(),
             outputs->getDev(),
             fireCount->getDev(),
-            inputDim,
-            outputDim,
+            inputSize,
+            outputSize,
             endTime,
-            inputAmount,
-            outputAmount,
             threshold,
             dummyFreq,
             T_REFRAC,
@@ -341,15 +331,15 @@ void Spiking::feedforward()
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("Spiking::g_Spiking_feedforward");
 
-    block = dim3(batch, outputAmount);
-    thread = dim3(min(outputDim, 1024));
+    block = dim3(batch, 1);
+    thread = dim3(min(outputSize, 1024));
 
     // transform the binary response matrix to the spike times
     g_response_2_spiketime<<<block, thread>>>(
             outputs->getDev(),
             outputs_time->getDev(),
             outputs->getArea(),
-            outputDim,
+            outputSize,
             endTime);
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("Spiking:g_response_2_spiketime");
@@ -357,13 +347,7 @@ void Spiking::feedforward()
 }
 
 void Spiking::backpropagation()
-{
-    // reduce to get the max fire count for each sample in the batch
-    int threads = min(1024, outputDim);
-    g_getMaxCount<<<dim3(batch), dim3(threads), sizeof(int) * threads>>>(fireCount->getDev(), maxCount->getDev(), fireCount->cols);  
-    cudaStreamSynchronize(0);
-    getLastCudaError("Spiking::g_getMaxCount");
-
+{ 
     if(m_name == std::string("output")){
         // compute the cost function
         g_getCost_output<<<dim3(1), dim3(256), sizeof(float) * 256>>>(fireCount->getDev(), groundTruth->getDev(), cost->getDev(), predict, batch, fireCount->cols, UNDESIRED_LEVEL, DESIRED_LEVEL, MARGIN);
@@ -376,21 +360,21 @@ void Spiking::backpropagation()
         getLastCudaError("Spiking::g_getDelta_output");
 
         // apply the sample weights
-        g_boostWeight_output<<<dim3(batch), dim3(outputDim)>>>(curDelta->getDev(), sample_weights, curDelta->getLen());
+        g_boostWeight_output<<<dim3(batch), dim3(outputSize)>>>(curDelta->getDev(), sample_weights, curDelta->getLen());
         cudaStreamSynchronize(0);
         getLastCudaError("Spiking::g_boostWeight_output");
 
         // compute the lateral factors if applicable
-        if(lateralFactor != NULL && !w_laterial.empty()){
-            threads = min(outputDim, 1024);
-            g_getLateralFactor_output<<<dim3(batch, outputDim), threads, sizeof(float) * threads>>>(
+        if(lateralFactor != NULL && w_laterial != NULL){
+            int threads = min(outputSize, 1024);
+            g_getLateralFactor_output<<<dim3(batch, outputSize), threads, sizeof(float) * threads>>>(
                 outputs_time->getDev(),
                 fireCount->getDev(),
                 lateralW,
                 predict,
                 lateralFactor->getDev(),
                 threshold,
-                outputDim,
+                outputSize,
                 endTime,
                 T_REFRAC,
                 TAU_M,
@@ -401,84 +385,87 @@ void Spiking::backpropagation()
 
         // modify the output spikes of the target neuron if it does not fire
         // tricky: modify both the spike trains and output fire counts!
-        g_modifySpikes<<<dim3(batch), dim3(min(outputDim, 1024))>>>(outputs->getDev(), predict, fireCount->getDev(), DESIRED_LEVEL, endTime, outputDim);
+        g_modifySpikes<<<dim3(batch), dim3(min(outputSize, 1024))>>>(outputs->getDev(), predict, fireCount->getDev(), DESIRED_LEVEL, endTime, outputSize);
         cudaStreamSynchronize(0);
         getLastCudaError("Spiking::g_modifySpikes");
 
         // retransform the binary matrix to the spike times since the outputs might be changed
-        g_response_2_spiketime<<<dim3(batch, outputAmount), dim3(min(outputDim, 1024))>>>(
+        g_response_2_spiketime<<<dim3(batch, 1), dim3(min(outputSize, 1024))>>>(
                 outputs->getDev(),
                 outputs_time->getDev(),
                 outputs->getArea(),
-                outputDim,
+                outputSize,
                 endTime);
         checkCudaErrors(cudaStreamSynchronize(0));
         getLastCudaError("Spiking:g_response_2_spiketime");
     }
     // pre compute the accumulative synaptic effect, and effect ratio (if applicable)
-    dim3 thread = dim3(min(1024, outputDim));
-    dim3 block  = dim3(batch, inputDim);
+    dim3 thread = dim3(min(1024, outputSize));
+    dim3 block  = dim3(batch, inputSize);
     cudaFuncSetCacheConfig(g_Spiking_synaptic_effect, cudaFuncCachePreferL1);
     g_Spiking_synaptic_effect<<<block, thread>>>(
-        inputs_time->getDev(),
+        inputs_time_format->getDev(),
         outputs_time->getDev(),
-        preFireCount->getDev(),
+        preFireCount_format->getDev(),
         fireCount->getDev(),
-        w[0]->getDev(),
+        w->getDev(),
         accEffect->getDev(),
         effectRatio == NULL ? NULL : effectRatio->getDev(),
-        inputDim,
-        outputDim,
+        inputSize,
+        outputSize,
         endTime,
         T_REFRAC,
         TAU_M,
         TAU_S);
-
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("g_Spiking_synaptic_effect");
-
-    // compute preDelta: curDelta: batch * outputDim; w: outputDim * inputDim
-    assert(w.size() == 1);
+    
+    // compute preDelta: curDelta: batch * outputSize; w: outputSize * inputSize
     if(preDelta == NULL){
         ConfigSpiking* config = (ConfigSpiking*)Config::instance()->getLayerByName(m_name);
         assert(config->m_input == "data");
     }
     else{
-       if(effectRatio != NULL){
-            matrixMul(curDelta, effectRatio, preDelta);
+        if(effectRatio != NULL){
+            matrixMul(curDelta, effectRatio, preDelta_format);
         }
         else{
-            matrixMul(curDelta, w[0], preDelta);
+            matrixMul(curDelta, w, preDelta_format);
         }
-    }    
-    // need more code to multi-channel input, simply learn: FullConnect.cu
+        // preDelta_format: (batch, channels * size, 1) -> preDelta: (batch, size, channels)
+        block = batch;
+        thread = min(512, preDelta->channels * preDelta->cols);
+        g_preDeltaFormat<<<block, thread>>>(preDelta_format->getDev(), preDelta->getDev(),
+            preDelta->rows, preDelta->cols, preDelta->channels);
+        cudaStreamSynchronize(0);
+        getLastCudaError("g_preDeltaFormat");
+    } 
 }
 
 /*
- * block = dim3(outputDim, outputAmount);
- * thread= dim3(min(inputDim, 1024));
+ * block = dim3(outputSize, 1);
+ * thread= dim3(min(inputSize, 1024));
 */
 __global__ void g_Spiking_calSquareSum(
-    float** w,
+    float* w,
     float* w_sq_sum,
-    int outputDim,
-    int inputDim,
+    int outputSize,
+    int inputSize,
     float weight_limit)
 {
     extern __shared__ float _sum[];
-    int ok = blockIdx.y;
     int o_id = blockIdx.x;
     int tid = threadIdx.x;
 
     _sum[tid] = 0;
     __syncthreads();
-    for(int i = 0; i < inputDim; i += blockDim.x)
+    for(int i = 0; i < inputSize; i += blockDim.x)
     {
         int id = i + tid;
-        if(id < inputDim)
+        if(id < inputSize)
         { 
-            int wid = id + o_id * inputDim;
-            float weight = w[ok][wid];
+            int wid = id + o_id * inputSize;
+            float weight = w[wid];
             _sum[tid] += (weight/weight_limit) * (weight/weight_limit);
         }
     }
@@ -495,34 +482,32 @@ __global__ void g_Spiking_calSquareSum(
         len = skip;
     }
     if(tid == 0)
-        w_sq_sum[o_id] = _sum[0] / inputDim;
+        w_sq_sum[o_id] = _sum[0] / inputSize;
 }
 
 /*
- * block = dim3(outputDim * inputDim, outputAmount);
+ * block = dim3(outputSize * inputSize);
  * thread= dim3(batch);
 */
 __global__ void g_Spiking_gradAdd(
-	float** _WgradTmp,
-	float** Wgrad,
-	float** w,
+	float* wgradTmp,
+	float* wgrad,
+	float* w,
     float* w_sq_sum,
 	int batch,
 	float lambda,
     float beta,
     float limit,
-    int inputDim,
+    int inputSize,
 	int wArea)
 {
 	extern __shared__ float _sum[];
 
-	int ok  = blockIdx.y;
 	int wid = blockIdx.x;
 	int tid = threadIdx.x;
 
 	_sum[tid] = 0;
 	__syncthreads();
-	float* wgradTmp = _WgradTmp[ok];
 	for(int i = 0; i < batch; i += blockDim.x)
 	{
 		int b = i + threadIdx.x;
@@ -545,60 +530,60 @@ __global__ void g_Spiking_gradAdd(
 	}
 	if(tid == 0)
 	{
-        float sq_sum = w_sq_sum[wid / inputDim];
-		Wgrad[ok][wid] = _sum[0] / batch + lambda*beta*(w[ok][wid]/limit)*__expf(beta*(sq_sum - 1));
+        float sq_sum = w_sq_sum[wid / inputSize];
+		wgrad[wid] = _sum[0] / batch + lambda*beta*(w[wid]/limit)*__expf(beta*(sq_sum - 1));
 	}
 }
 
 void Spiking::getGrad()
 {
-    dim3 thread = dim3(min(1024, outputDim));
-    dim3 block  = dim3(batch, inputDim);
+    dim3 thread = dim3(min(1024, outputSize));
+    dim3 block  = dim3(batch, inputSize);
     cudaFuncSetCacheConfig(g_Spiking_wgrad_spiketime,cudaFuncCachePreferL1);
 
     g_Spiking_wgrad_spiketime<<<block, thread>>>(
         accEffect->getDev(),
         curDelta->getDev(),
         lateralFactor == NULL ? NULL : lateralFactor->getDev(),
-        wgradTmp.m_devPoint,
-        inputDim,
-        outputDim);
+        wgradTmp->getDev(),
+        inputSize,
+        outputSize);
 
     checkCudaErrors(cudaStreamSynchronize(0));
 	getLastCudaError("g_Spiking_wgrad_spiketime");
 
 #ifdef DEBUG
-    g_Spiking_debug_spiketime<<<block, thread>>>(inputs_time->getDev(), outputs_time->getDev(), preFireCount->getDev(), fireCount->getDev(), inputDim, outputDim, endTime);
+    g_Spiking_debug_spiketime<<<block, thread>>>(inputs_time->getDev(), outputs_time->getDev(), preFireCount->getDev(), fireCount->getDev(), inputSize, outputSize, endTime);
     checkCudaErrors(cudaStreamSynchronize(0));
 	getLastCudaError("g_Spiking_debug_spiketime");
 #endif
     
-    block = dim3(outputDim);
-    thread = dim3(min(inputDim, 1024));
+    block = dim3(outputSize);
+    thread = dim3(min(inputSize, 1024));
 
-    g_Spiking_calSquareSum<<<block, thread, sizeof(float) * min(inputDim, 1024)>>>(
-        w.m_devPoint,
+    g_Spiking_calSquareSum<<<block, thread, sizeof(float) * min(inputSize, 1024)>>>(
+        w->getDev(),
         weightSqSum->getDev(),
-        outputDim,
-        inputDim,
+        outputSize,
+        inputSize,
         weightLimit);
     checkCudaErrors(cudaStreamSynchronize(0));    
 	getLastCudaError("g_Spiking_calSquareSum");
  
-	block  = dim3(outputDim * inputDim, outputAmount);
+	block  = dim3(outputSize * inputSize);
 	thread = dim3(batch);
 
 	g_Spiking_gradAdd<<<block, thread, sizeof(float) * batch>>>(
-		wgradTmp.m_devPoint,
-		wgrad.m_devPoint,
-		w.m_devPoint,
+		wgradTmp->getDev(),
+		wgrad->getDev(),
+		w->getDev(),
         weightSqSum->getDev(),
 		batch,
 		lambda,
         beta,
         weightLimit,
-        inputDim,
-		w[0]->getArea());
+        inputSize,
+		w->getArea());
 
 	checkCudaErrors(cudaStreamSynchronize(0));
 	getLastCudaError("g_Spiking_gradAdd");
@@ -606,7 +591,7 @@ void Spiking::getGrad()
     // add the bias derivation here:
     ConfigSpiking * config = (ConfigSpiking*) Config::instance()->getLayerByName(m_name); 
     if(config->hasBias()){
-        thread = dim3(min(1024, outputDim));
+        thread = dim3(min(1024, outputSize));
         block  = dim3(batch);
  
         int dummyFreq = config->getBiasFreq();
@@ -614,8 +599,8 @@ void Spiking::getGrad()
             outputs_time->getDev(),
             fireCount->getDev(),
             curDelta->getDev(),
-            bgradTmp.m_devPoint,
-            outputDim,
+            bgradTmp->getDev(),
+            outputSize,
             endTime,
             dummyFreq,
             T_REFRAC,
@@ -625,20 +610,20 @@ void Spiking::getGrad()
     	checkCudaErrors(cudaStreamSynchronize(0));
 	    getLastCudaError("g_Spiking_bgrad_spiketime");
         
-        block  = dim3(outputDim);
+        block  = dim3(outputSize);
         thread = dim3(batch);
  
         g_Spiking_gradAdd<<<block, thread, sizeof(float) * batch>>>(
-            bgradTmp.m_devPoint,
-            bgrad.m_devPoint,
-            b.m_devPoint,
+            bgradTmp->getDev(),
+            bgrad->getDev(),
+            b->getDev(),
             weightSqSum->getDev(),
             batch,
             0.0f,
             0.0f,
             weightLimit,
-            inputDim,
-            b[0]->getArea());
+            inputSize,
+            b->getArea());
     }
 
 }	
@@ -646,172 +631,45 @@ void Spiking::getGrad()
 
 void Spiking::updateWeight()
 {
-	dim3 block  = outputAmount;
-	dim3 thread = min(256, w[0]->getLen());
+    dim3 block  = min((w->getLen() + 255)/ 256, 5120);
+    dim3 thread = 256;
+
     if(Config::instance()->getOptimizerType() == std::string("adam")){
         g_adam_vecAdd<<<block, thread, 0, Layers::instance()->get_stream()>>>(
-            g1_w.m_devPoint,
-            g2_w.m_devPoint,
-            b1_t->getDev(),
-            b2_t->getDev(),
-            wgrad.m_devPoint,
-            w.m_devPoint,
-            w[0]->getLen(),
+            g1_w->getDev(),
+            g2_w->getDev(),
+            b1_t,
+            b2_t,
+            wgrad->getDev(),
+            w->getDev(),
+            w->getLen(),
             Config::instance()->getLrate());
+            b1_t *= 0.9f; b2_t *= 0.999f;
     } 
     else{
         g_sgd_vecAdd<<<block, thread, 0, Layers::instance()->get_stream()>>>(
-            momentum_w.m_devPoint,
-            wgrad.m_devPoint, 
-            w.m_devPoint,
-            w[0]->getLen(), 
+            momentum_w->getDev(),
+            wgrad->getDev(), 
+            w->getDev(),
+            w->getLen(), 
             Config::instance()->getMomentum(),
             Config::instance()->getLrate());
-
-        ConfigSpiking * config = (ConfigSpiking*) Config::instance()->getLayerByName(m_name); 
-        if(config->hasBias()){
-            block = outputAmount;
-            thread = min(256, b[0]->getLen());
-            g_sgd_vecAdd<<<block, thread, 0, Layers::instance()->get_stream()>>>(
-                momentum_b.m_devPoint,
-                bgrad.m_devPoint,
-                b.m_devPoint,
-                b[0]->getLen(),
-                Config::instance()->getMomentum(),
-                Config::instance()->getLrate());
-        }
     }
-}
-
-/*
- * dim3 block = dim3(batch)
- * dim3 thread = min(1024, outputDim)
- */
-__global__ void g_Spiking_delta_vth(int* batchFireCount, float * vth, float * vthDeltaTmp, int outputDim, float DESIRED_LEVEL, float MARGIN)
-{
-    int batchId = blockIdx.x;
-    float * vthDelta = vthDeltaTmp + batchId * outputDim;
-    int * fireCount = batchFireCount + batchId * outputDim;
-    for(int i = 0; i < outputDim; i += blockDim.x)
-    {
-        int o_idx = i + threadIdx.x;
-        if(o_idx < outputDim)
-        {
-            if(fireCount[o_idx] == 0 && vth[o_idx] > 5.0f)
-                vthDelta[o_idx] = 0.0001 * outputDim;
-            else if(fireCount[o_idx] > DESIRED_LEVEL + MARGIN && vth[o_idx] < 25.0f)
-                vthDelta[o_idx] = -0.0001 * outputDim;
-        }
+    ConfigSpiking * config = (ConfigSpiking*) Config::instance()->getLayerByName(m_name); 
+    if(config->hasBias()){
+        block  = min((w->getLen() + 255)/ 256, 5120);
+        thread = 256;
+        g_sgd_vecAdd<<<block, thread, 0, Layers::instance()->get_stream()>>>(
+            momentum_b->getDev(),
+            bgrad->getDev(),
+            b->getDev(),
+            b->getLen(),
+            Config::instance()->getMomentum(),
+            Config::instance()->getLrate());
     }
-}
-
-/*
- * dim3 block = dim3(outputDim)
- * dim3 thread = min(batch)
- */
-__global__ void g_Spiking_delta_vthAdd(float* vthDeltaTmp, float* vthDelta, int batch, int vthArea)
-{
-    extern __shared__ float _sum[];
-        
-    int vid = blockIdx.x;
-    int tid = threadIdx.x;
-
-    _sum[tid] = 0;
-    __syncthreads();
-    for(int i = 0; i < batch; i += blockDim.x)
-    {
-        int b = i + tid;
-        if(b < batch)
-        {
-            _sum[tid] += vthDeltaTmp[b * vthArea + vid];
-        }
-    }
-    __syncthreads();
-    int len = blockDim.x;
-    while(len != 1)
-	{
-		__syncthreads();
-		int skip = (len + 1) >> 1;
-		if(tid < skip && (tid + skip) < len)
-		{
-			_sum[tid] += _sum[tid + skip];
-		}
-		len = skip;
-	}
-    if(tid == 0)
-        vthDelta[vid] = _sum[0] / batch;
-}
-
-
-void Spiking::getDeltaVth()
-{
-    dim3 thread = dim3(min(1024, outputDim));
-    dim3 block = dim3(batch);
-    cudaFuncSetCacheConfig(g_Spiking_delta_vth, cudaFuncCachePreferL1);
-    g_Spiking_delta_vth<<<block, thread>>>(
-        fireCount->getDev(),
-        vth->getDev(),
-        vthDeltaTmp->getDev(),
-        outputDim,
-        DESIRED_LEVEL,
-        MARGIN);
-    
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("g_Spiking_delta_vth");
-    
-    block  = dim3(outputDim);
-	thread = dim3(batch);
-   
-    g_Spiking_delta_vthAdd<<<block, thread, sizeof(float) * batch>>>(
-        vthDeltaTmp->getDev(),
-        vthDelta->getDev(),
-        batch,
-        vth->getArea());
-
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("g_Spiking_delta_vthAdd");
 
 }
 
-/*
- * dim3 block = dim3(1)
- * dim3 thread = min(256, outputDim)
- */
-__global__ void g_Spiking_vth_vecAdd(float * vthDelta, float * vth, int lenVth)
-{
-    for(int i = 0; i < lenVth; i += blockDim.x)
-    {
-        int id = i + threadIdx.x;
-        if(id < lenVth)
-        {
-            vth[id] -= vthDelta[id];
-        }
-    }
-}
-
-void Spiking::updateVth()
-{
-    dim3 block = 1;
-    dim3 thread = min(256, outputDim);
-    g_Spiking_vth_vecAdd<<<block, thread, 0, Layers::instance()->get_stream()>>>(
-        vthDelta->getDev(),
-        vth->getDev(),
-        vth->getLen());
-}
-
-__global__ void g_weight_cp_test(float ** ws, int nrows, int ncols)
-{
-    int weight_size = nrows * ncols;
-    float * w = ws[0];
-    for(int i = 0; i < weight_size; i += blockDim.x)
-    {
-        int idx = i + threadIdx.x;
-        if(idx < weight_size && fabsf(w[idx]) > 1e-5)
-        {
-            printf("Accessing row: %d , col: %d,  the weight is %f \n", idx /ncols, idx % ncols, w[idx]);
-        }
-    }
-}
 
 Spiking::Spiking(std::string name)
 {
@@ -821,14 +679,15 @@ Spiking::Spiking(std::string name)
 
 	inputs = preLayer->getSpikingOutputs();
     inputs_time = preLayer->getSpikingTimeOutputs();
+    inputs_time_format = new cuMatrix<int>(inputs_time->rows, inputs_time->cols * inputs_time->channels, 1);
 	preDelta = preLayer->getCurDelta();
-    preFireCount = preLayer->getFireCount();
-	
-    inputAmount  = preLayer->outputAmount;
-    outputAmount = inputAmount;
+	preDelta_format = NULL;
+    if(preDelta != NULL)
+        preDelta_format = new cuMatrix<float>(preDelta->rows, preDelta->cols * preDelta->channels, 1);
 
-	inputDim  = preLayer->outputDim;
-	outputDim = config->m_numNeurons;
+    preFireCount = preLayer->getFireCount();
+    preFireCount_format = new cuMatrix<int>(preFireCount->rows, preFireCount->cols * preFireCount->channels, 1);
+	
     endTime   = Config::instance()->getEndTime(); 
 	batch     = Config::instance()->getBatchSize();
 	lambda    = Config::instance()->getLambda();
@@ -837,74 +696,61 @@ Spiking::Spiking(std::string name)
     TAU_M     = config->m_tau_m;
     TAU_S     = config->m_tau_s;    
 
+	inputSize  = inputs->cols * inputs->channels / endTime;
+	outputSize = config->m_numNeurons;
+
     weightLimit = Config::instance()->getWeightLimit();
 
     UNDESIRED_LEVEL = config->m_undesired_level;
     DESIRED_LEVEL   = config->m_desired_level;
     MARGIN          = config->m_margin; 
 
-    outputs  = new cuMatrix<bool>(batch, outputDim * endTime, outputAmount);
-    outputs_time = new cuMatrix<int>(batch, outputDim * endTime, outputAmount);
+    outputs  = new cuMatrix<bool>(batch, outputSize * endTime, 1);
+    outputs_time = new cuMatrix<int>(batch, outputSize * endTime, 1);
 
     // for fast input response
-    inputs_resp_tmp = new cuMatrix<float>(outputDim, endTime * batch, 1);
-    inputs_resp = new cuMatrix<float>(batch, outputDim * endTime, 1);
-    inputs_float = new cuMatrix<float>(inputDim, endTime * batch, 1);
+    inputs_resp_tmp = new cuMatrix<float>(outputSize, endTime * batch, 1);
+    inputs_resp = new cuMatrix<float>(batch, outputSize * endTime, 1);
+    inputs_float = new cuMatrix<float>(inputSize, endTime * batch, 1);
 
-	curDelta = new cuMatrix<float>(batch, outputDim, outputAmount);
-    fireCount= new cuMatrix<int>(batch, outputDim, outputAmount);
-    weightSqSum = new cuMatrix<float>(outputDim, 1, 1);
+	curDelta = new cuMatrix<float>(batch, outputSize, 1);
+    fireCount= new cuMatrix<int>(batch, outputSize, 1);
+    weightSqSum = new cuMatrix<float>(outputSize, 1, 1);
     maxCount    = new cuMatrix<int>(batch, 1, 1);
-    accEffect   = new cuMatrix<float>(batch, outputDim * inputDim, 1); 
+    accEffect   = new cuMatrix<float>(batch, outputSize * inputSize, 1); 
 
     predict = NULL;
 
     // only for the output
     if(config->m_name == std::string("output")){
-        groundTruth   = new cuMatrix<float>(batch, outputDim, 1);
+        groundTruth   = new cuMatrix<float>(batch, outputSize, 1);
         cost          = new cuMatrix<float>(1, 1, 1);
     }
     else{
         groundTruth   = NULL;
         cost          = NULL;
     }
-    assert(outputDim > 0 && inputDim > 0);
+    assert(outputSize > 0 && inputSize > 0);
 
-	for(int i = 0; i < outputAmount; i++){
-		w.push_back(new cuMatrix<float>(outputDim, inputDim, 1));
-		b.push_back(new cuMatrix<float>(outputDim, 1, 1));
-		wgrad.push_back(new cuMatrix<float>(outputDim, inputDim, 1));
-		bgrad.push_back(new cuMatrix<float>(outputDim, 1, 1));
-		wgradTmp.push_back(new cuMatrix<float>(batch, outputDim * inputDim, 1));
-        bgradTmp.push_back(new cuMatrix<float>(batch, outputDim, 1));
-        
-        if(config->hasLaterialWeight() == true){
-            w_laterial.push_back(new cuMatrix<float>(outputDim, outputDim, 1));
-        }
-	}
+    w        = new cuMatrix<float>(outputSize, inputSize, 1);
+    b        = new cuMatrix<float>(outputSize, 1, 1);
+    wgrad    = new cuMatrix<float>(outputSize, inputSize, 1);
+    bgrad    = new cuMatrix<float>(outputSize, 1, 1);
+    wgradTmp = new cuMatrix<float>(batch, outputSize * inputSize, 1);
+    bgradTmp = new cuMatrix<float>(batch, outputSize, 1);
+    if(config->hasLaterialWeight() == true){
+        w_laterial = new cuMatrix<float>(outputSize, outputSize, 1);
+    }
+    else
+        w_laterial = NULL;
     
     threshold = config->m_vth;
-    vth = new cuMatrix<float>(outputDim, 1, 1);
-    vthDelta = new cuMatrix<float>(outputDim, 1, 1);
-    vthDeltaTmp = new cuMatrix<float>(batch, outputDim, 1);
-
-	w.toGpu();
-	b.toGpu();
-    b[0]->toGpu();
-	wgrad.toGpu();
-	bgrad.toGpu();
-	wgradTmp.toGpu();
-    bgradTmp.toGpu();
-
-    if(config->hasLaterialWeight() == true){
-        w_laterial.toGpu();
-    }
    
     // lateral inihibition factor for the output
     lateralFactor = NULL;
     lateralW = 0.0f;
     if(config->hasLaterialInh() == true && config->m_name == std::string("output")){
-        lateralFactor = new cuMatrix<float>(batch, outputDim, 1);
+        lateralFactor = new cuMatrix<float>(batch, outputSize, 1);
         lateralW = config->m_localInbStrength;
     }
 
@@ -917,34 +763,22 @@ Spiking::Spiking(std::string name)
             printf("Current batch size: %d\n", batch);
             assert(batch <= 1);
         }
-        effectRatio = new cuMatrix<float>(outputDim, inputDim, 1);
+        effectRatio = new cuMatrix<float>(outputSize, inputSize, 1);
     }
 
-	for(int i = 0; i < outputAmount; i++){
-		momentum_w.push_back(new cuMatrix<float>(outputDim, inputDim, 1));
-		momentum_b.push_back(new cuMatrix<float>(outputDim, 1, 1));
-        g1_w.push_back(new cuMatrix<float>(outputDim, inputDim, 1)); // for adam
-        g1_b.push_back(new cuMatrix<float>(outputDim, 1, 1));
-        g2_w.push_back(new cuMatrix<float>(outputDim, inputDim, 1));
-        g2_b.push_back(new cuMatrix<float>(outputDim, 1, 1));       
-	}
-	momentum_w.toGpu();
-	momentum_b.toGpu();
-    g1_w.toGpu();
-    g1_b.toGpu();
-    g2_w.toGpu();
-    g2_b.toGpu();
-
-    b1_t = new cuMatrix<float>(1, 1, 1);
-    b2_t = new cuMatrix<float>(1, 1, 1);
-    for(int i = 0; i < b1_t->getLen(); i++){
-        b1_t->getHost()[i] = 0.9f;
-        b2_t->getHost()[i] = 0.999f;
-    }
-    b1_t->toGpu();
-    b2_t->toGpu();
-
+    momentum_w = new cuMatrix<float>(outputSize, inputSize, 1);
+    momentum_b = new cuMatrix<float>(outputSize, 1, 1);
+    g1_w       = new cuMatrix<float>(outputSize, inputSize, 1); // for adam
+    g1_b       = new cuMatrix<float>(outputSize, 1, 1);
+    g2_w       = new cuMatrix<float>(outputSize, inputSize, 1);
+    g2_b       = new cuMatrix<float>(outputSize, 1, 1);
+    b1_t = 0.9;
+    b2_t = 0.999;
+ 
 	this->initRandom();
+    w_ref = NULL;
+    w_laterial_ref = NULL;
+    b_ref = NULL; 
 
     if(Config::instance()->getIsGradientChecking())
         this->loadRef(); // for verification purpose
@@ -954,33 +788,30 @@ Spiking::Spiking(std::string name)
 
 void Spiking::save(FILE* file)
 {
-    for(int a = 0; a < (int)w.size(); a++){
+    w->toCpu();
+    b->toCpu();
 
-        w[a]->toCpu();
-        b[a]->toCpu();
-
-        for(int c = 0; c < w[a]->channels; c++){
-            for(int i = 0; i < w[a]->rows; i++){
-                for(int j = 0; j < w[a]->cols; j++){
-                    fprintf(file, "%f ", w[a]->get(i, j, c));
-                }
+    for(int c = 0; c < w->channels; c++){
+        for(int i = 0; i < w->rows; i++){
+            for(int j = 0; j < w->cols; j++){
+                fprintf(file, "%f ", w->get(i, j, c));
             }
         }
-        if(!w_laterial.empty()){
-            for(int c = 0; c < w_laterial[a]->channels; c++){
-                for(int i = 0; i < w_laterial[a]->rows; i++){
-                    for(int j = 0; j < w_laterial[a]->cols; j++){
-                        fprintf(file, "%f ", w_laterial[a]->get(i, j, c));
-                    }
+    }
+    if(w_laterial != NULL){
+        for(int c = 0; c < w_laterial->channels; c++){
+            for(int i = 0; i < w_laterial->rows; i++){
+                for(int j = 0; j < w_laterial->cols; j++){
+                    fprintf(file, "%f ", w_laterial->get(i, j, c));
                 }
-            } 
-        }
+            }
+        } 
+    }
 
-        for(int c = 0; c < b[a]->channels; c++){
-            for(int i = 0; i < b[a]->rows; i++){
-                for(int j = 0; j < b[a]->cols; j++){
-                    fprintf(file, "%f ", b[a]->get(i, j, c));
-                }
+    for(int c = 0; c < b->channels; c++){
+        for(int i = 0; i < b->rows; i++){
+            for(int j = 0; j < b->cols; j++){
+                fprintf(file, "%f ", b->get(i, j, c));
             }
         }
     }
@@ -988,12 +819,8 @@ void Spiking::save(FILE* file)
 
 void Spiking::clearMomentum()
 {
-	for(int i = 0; i < (int)momentum_b.size(); i++){
-		momentum_b[i]->gpuClear();
-	}
-	for(int i = 0; i < (int)momentum_w.size(); i++){
-		momentum_w[i]->gpuClear();
-	}
+    momentum_b->gpuClear();
+    momentum_w->gpuClear();
 }
 
 void Spiking::verify(const std::string& phrase)
@@ -1003,29 +830,29 @@ void Spiking::verify(const std::string& phrase)
     {
         if(!output_train_ref.empty()){
             outputs->toCpu();
-            checkMatrixIsSame(output_train_ref[0], outputs, outputDim);
+            checkMatrixIsSame(output_train_ref[0], outputs, outputSize);
         }
         
     }
     else if(phrase == std::string("test"))
     {
-        if(!w_ref.empty()){
-            w[0]->toCpu();
-            checkMatrixIsSame(w_ref[0], w[0]);
+        if(w_ref != NULL){
+            w->toCpu();
+            checkMatrixIsSame(w_ref, w);
         }
-        if(!w_laterial_ref.empty() && !w_laterial.empty()){
-            w_laterial[0]->toCpu();
-            checkMatrixIsSame(w_laterial_ref[0], w_laterial[0]);
+        if(w_laterial_ref != NULL && w_laterial != NULL){
+            w_laterial->toCpu();
+            checkMatrixIsSame(w_laterial_ref, w_laterial);
         }
  
-        if(!b_ref.empty()){
-            b[0]->toCpu();
-            checkMatrixIsSame(b_ref[0], b[0]);
+        if(b_ref != NULL){
+            b->toCpu();
+            checkMatrixIsSame(b_ref, b);
         }
     
         if(!output_test_ref.empty()){
             outputs->toCpu();
-            checkMatrixIsSame(output_test_ref[0], outputs, outputDim);
+            checkMatrixIsSame(output_test_ref[0], outputs, outputSize);
         }
     }
     printf("Verification for the layer: %s at %s phrase. Pased!!\n", m_name.c_str(), phrase.c_str());
@@ -1040,31 +867,31 @@ void Spiking::loadRef()
     }
     ConfigSpiking * config = (ConfigSpiking*)Config::instance()->getLayerByName(m_name);
     if(config->m_ref_weight_path != std::string("NULL")){
-        w_ref.push_back(new cuMatrix<float>(outputDim, inputDim, 1));
+        w_ref = new cuMatrix<float>(outputSize, inputSize, 1);
         initFromDumpfile(config->m_ref_weight_path, w_ref);
         if(config->hasBias()){
-            b_ref.push_back(new cuMatrix<float>(outputDim, 1, 1));
+            b_ref = new cuMatrix<float>(outputSize, 1, 1);
             initBiasFromDumpfile(config->m_ref_weight_path, b_ref);
         }
     }
 
     if(config->m_ref_lweight_path != std::string("NULL")){
-        w_laterial_ref.push_back(new cuMatrix<float>(outputDim, outputDim, 1));
+        w_laterial_ref = new cuMatrix<float>(outputSize, outputSize, 1);
         initFromDumpfile(config->m_ref_lweight_path, w_laterial_ref);
     }
 
     if(config->m_ref_output_train_path != std::string("NULL")){
-        read_each_speech_dump(config->m_ref_output_train_path, output_train_ref, endTime, outputDim);
+        read_each_speech_dump(config->m_ref_output_train_path, output_train_ref, endTime, outputSize);
         assert(output_train_ref.size() == 1 && output_train_ref[0] != NULL);
         output_train_ref[0]->rows = 1;
-        output_train_ref[0]->cols = endTime * outputDim;
+        output_train_ref[0]->cols = endTime * outputSize;
     }
 
     if(config->m_ref_output_test_path != std::string("NULL")){
-        read_each_speech_dump(config->m_ref_output_test_path, output_test_ref, endTime, outputDim);
+        read_each_speech_dump(config->m_ref_output_test_path, output_test_ref, endTime, outputSize);
         assert(output_test_ref.size() == 1 && output_test_ref[0] != NULL);
         output_test_ref[0]->rows = 1;
-        output_test_ref[0]->cols = endTime * outputDim;
+        output_test_ref[0]->cols = endTime * outputSize;
    }
 
 }
@@ -1075,47 +902,41 @@ void Spiking::initRandom()
     float initW = config->m_initW;
  
     if(config->isGaussian()){
-        for(int i = 0; i < (int)w.size(); i++){
-            float epsilon = initW;
-            for(int c = 0; c < w[i]->channels; c++)
-            {
-                float r1 = 0.5f + 4.0f * (rand()) / RAND_MAX;
-                float r2 = 0.5f + 4.0f * (rand()) / RAND_MAX;
-                createGaussian(w[i]->getHost() + c * w[i]->getArea(), r1,r2,
-                        outputDim, inputDim, w[i]->channels,
-                        epsilon);
-            }
-            w[i]->toGpu();
+        float epsilon = initW;
+        for(int c = 0; c < w->channels; c++)
+        {
+            float r1 = 0.5f + 4.0f * (rand()) / RAND_MAX;
+            float r2 = 0.5f + 4.0f * (rand()) / RAND_MAX;
+            createGaussian(w->getHost() + c * w->getArea(), r1,r2,
+                    outputSize, inputSize, w->channels,
+                    epsilon);
         }
+        w->toGpu();
     }
     else if(config->isBernoulli()){
-        for(int i = 0; i < (int)w.size(); i++){
-            for(int j = 0; j < w[i]->getLen(); j++){
-                w[i]->getHost()[j] =  initW * (2.0f * rand() / RAND_MAX - 1.0f);
-                //printf("%f ", w[i]->getHost()[j]);
-            }//printf("\n");
-            w[i]->toGpu();
-        }
+        for(int j = 0; j < w->getLen(); j++){
+            w->getHost()[j] =  initW * (2.0f * rand() / RAND_MAX - 1.0f);
+            //printf("%f ", w->getHost()[j]);
+        }//printf("\n");
+        w->toGpu();
     }
     else if(config->isFixed()){
         // one input connects to nconnect randomly selected outputs, with initW/-initW
         int nconnect = config->m_weightConnect;
         assert(nconnect > 0);
-        for(int a = 0; a < w.size(); a++){
-            for(int c = 0; c < w[a]->channels; ++c){
-                for(int i = 0; i < w[a]->rows; ++i){
-                    for(int t = 0; t < nconnect; ++t){
-                        int j = rand() % inputDim;
-                        if(rand() % 2 == 0)
-                            w[a]->set(i, j, c, initW);
-                        else
-                            w[a]->set(i, j, c, -1.0*initW);
-                        //printf("input_%d to reservoir_%d : %f\n", j, i, w[a]->get(i, j, c));
-                    }
+        for(int c = 0; c < w->channels; ++c){
+            for(int i = 0; i < w->rows; ++i){
+                for(int t = 0; t < nconnect; ++t){
+                    int j = rand() % inputSize;
+                    if(rand() % 2 == 0)
+                        w->set(i, j, c, initW);
+                    else
+                        w->set(i, j, c, -1.0*initW);
+                    //printf("input_%d to reservoir_%d : %f\n", j, i, w->get(i, j, c));
                 }
             }
-            w[a]->toGpu();
         }
+        w->toGpu();
     }
     else if(config->isExternal()){
         initFromDumpfile(config->m_weightPath, w);
@@ -1124,71 +945,63 @@ void Spiking::initRandom()
         initLaterial();
     }
 
-    // initialize vth
-    float thres = config->m_vth;
-    for(int i = 0; i < outputDim; ++i){
-        vth->set(i, 0, 0, thres);
-    }
-    vth->toGpu();
 }
 
 void Spiking::initFromCheckpoint(FILE* file)
 {
     float val = 0;
-    for(int a = 0; a < (int)w.size(); a++){
-        for(int c = 0; c < w[a]->channels; c++){
-            for(int i = 0; i < w[a]->rows; i++){
-                for(int j = 0; j < w[a]->cols; j++){
-                    if(fscanf(file, "%f", &val) == EOF)
-                    {
-                        char logStr[256];
-                        sprintf(logStr, "scanf fail for layer: %s\n", m_name.c_str());
-                        LOG(logStr, "Result/log.txt");
-                        assert(0);
-                    }
-                    w[a]->set(i, j, c, val);
+    for(int c = 0; c < w->channels; c++){
+        for(int i = 0; i < w->rows; i++){
+            for(int j = 0; j < w->cols; j++){
+                if(fscanf(file, "%f", &val) == EOF)
+                {
+                    char logStr[256];
+                    sprintf(logStr, "scanf fail for layer: %s\n", m_name.c_str());
+                    LOG(logStr, "Result/log.txt");
+                    assert(0);
                 }
+                w->set(i, j, c, val);
             }
         }
-
-        if(!w_laterial.empty()){
-            for(int c = 0; c < w_laterial[a]->channels; c++){
-                for(int i = 0; i < w_laterial[a]->rows; i++){
-                    for(int j = 0; j < w_laterial[a]->cols; j++){
-                        if(fscanf(file, "%f", &val) == EOF)
-                        {
-                            char logStr[256];
-                            sprintf(logStr, "scanf fail for layer: %s\n", m_name.c_str());
-                            LOG(logStr, "Result/log.txt");
-                        }
-                        w_laterial[a]->set(i, j, c, val);
-                    }
-                }
-            } 
-        }
-
-        for(int c = 0; c < b[a]->channels; c++){
-            for(int i = 0; i < b[a]->rows; i++){
-                for(int j = 0; j < b[a]->cols; j++){
-                    if(fscanf(file, "%f", &val) == EOF)
-                    {
-                        char logStr[256];
-                        sprintf(logStr, "scanf fail for layer: %s\n", m_name.c_str());
-                        LOG(logStr, "Result/log.txt");
-                        assert(0);
-                    }
-                    b[a]->set(i, j, c, val);
-                }
-            }
-        }
-
-        w[a]->toGpu();
-        b[a]->toGpu();
     }
+
+    if(w_laterial != NULL){
+        for(int c = 0; c < w_laterial->channels; c++){
+            for(int i = 0; i < w_laterial->rows; i++){
+                for(int j = 0; j < w_laterial->cols; j++){
+                    if(fscanf(file, "%f", &val) == EOF)
+                    {
+                        char logStr[256];
+                        sprintf(logStr, "scanf fail for layer: %s\n", m_name.c_str());
+                        LOG(logStr, "Result/log.txt");
+                    }
+                    w_laterial->set(i, j, c, val);
+                }
+            }
+        } 
+    }
+
+    for(int c = 0; c < b->channels; c++){
+        for(int i = 0; i < b->rows; i++){
+            for(int j = 0; j < b->cols; j++){
+                if(fscanf(file, "%f", &val) == EOF)
+                {
+                    char logStr[256];
+                    sprintf(logStr, "scanf fail for layer: %s\n", m_name.c_str());
+                    LOG(logStr, "Result/log.txt");
+                    assert(0);
+                }
+                b->set(i, j, c, val);
+            }
+        }
+    }
+
+    w->toGpu();
+    b->toGpu();
 }
 
 //* initial the weights from the dumped file by the CPU sim
-void Spiking::initFromDumpfile(const std::string& filename, cuMatrixVector<float>& cuW)
+void Spiking::initFromDumpfile(const std::string& filename, cuMatrix<float>*& cuW)
 {
     ifstream f_in(filename.c_str());
     if(!f_in.is_open()){
@@ -1196,8 +1009,8 @@ void Spiking::initFromDumpfile(const std::string& filename, cuMatrixVector<float
         exit(EXIT_FAILURE);
     }
  
-    assert(cuW.size() == 1);
-    std::vector<std::vector<float> > weights(cuW[0]->rows, std::vector<float>(cuW[0]->cols, 0.0f));
+    assert(cuW != NULL);
+    std::vector<std::vector<float> > weights(cuW->rows, std::vector<float>(cuW->cols, 0.0f));
    
     int idx; 
     float weight;
@@ -1218,33 +1031,31 @@ void Spiking::initFromDumpfile(const std::string& filename, cuMatrixVector<float
         weights[post][pre] += weight;
     }
 
-	for(int a = 0; a < (int)cuW.size(); a++){
-		for(int c = 0; c < cuW[a]->channels; c++){
-			for(int i = 0; i < cuW[a]->rows; i++){
-				for(int j = 0; j < cuW[a]->cols; j++){
-					cuW[a]->set(i, j, c, weights[i][j]);
-				}
-			}
-		}
-		cuW[a]->toGpu();
+    for(int c = 0; c < cuW->channels; c++){
+        for(int i = 0; i < cuW->rows; i++){
+            for(int j = 0; j < cuW->cols; j++){
+                cuW->set(i, j, c, weights[i][j]);
+            }
+        }
     }
+    cuW->toGpu();
     // verify that the weights is correctly copied!
     for(int i = 0; i < weights.size(); ++i){
         for(int j = 0; j < weights[0].size(); ++j){
-            assert(fabsf(cuW[0]->get(i, j, 0) - weights[i][j]) < 1e-4);
+            assert(fabsf(cuW->get(i, j, 0) - weights[i][j]) < 1e-4);
         }
     }
 }
 
 //* initial the bias weights from the dumped file by the CPU sim
-void Spiking::initBiasFromDumpfile(const std::string& filename, cuMatrixVector<float>& cuW)
+void Spiking::initBiasFromDumpfile(const std::string& filename, cuMatrix<float>*& cuW)
 {
     ifstream f_in(filename.c_str());
     if(!f_in.is_open()){
         printf("Cannot open the file: %s\n", filename.c_str());
         exit(EXIT_FAILURE);
     }
-    assert(cuW.size() == 1);
+    assert(cuW != NULL);
 
     int idx; 
     float weight;
@@ -1252,11 +1063,11 @@ void Spiking::initBiasFromDumpfile(const std::string& filename, cuMatrixVector<f
     while(f_in>>idx>>pre_name>>post_name>>weight){
         int pre = extractNeuronIndex(pre_name);
         int post = extractNeuronIndex(post_name);
-        if(pre == inputDim && post < outputDim){ // this is related to bias
-            cuW[0]->set(post, 0, 0, weight); 
+        if(pre == inputSize && post < outputSize){ // this is related to bias
+            cuW->set(post, 0, 0, weight); 
         }
     }
-    cuW[0]->toGpu();
+    cuW->toGpu();
 }
 
 void Spiking::initLaterial()
@@ -1276,11 +1087,11 @@ void Spiking::initLaterial()
 void Spiking::initReservoirConnection(const std::vector<int>& reservoirDim)
 {
     assert(reservoirDim.size() == 3);
-    assert(w_laterial.size() == 1);
+    assert(w_laterial != NULL);
     int d1 = reservoirDim[0], d2 = reservoirDim[1], d3 = reservoirDim[2];
     int num = d1 * d2 * d3;
-    if(num != outputDim){
-        printf("The reservoir dim: %d x %d x %d = %d does not match the number neuron: %d!\n",d1, d2, d3, num, outputDim);
+    if(num != outputSize){
+        printf("The reservoir dim: %d x %d x %d = %d does not match the number neuron: %d!\n",d1, d2, d3, num, outputSize);
         exit(EXIT_FAILURE);
     }
     // adopted from the CPU code:
@@ -1334,36 +1145,35 @@ void Spiking::initReservoirConnection(const std::vector<int>& reservoirDim)
             distsq += dist * dist;
             if(rand() % 100000 < 100000 * c * exp(-distsq / 4)){
                 //printf("reservoir_%d to reservoir_%d %f\n", i , j, a);
-                w_laterial[0]->set(j, i, 0, a);
+                w_laterial->set(j, i, 0, a);
             }
         }
     }
-    w_laterial[0]->toGpu();
+    w_laterial->toGpu();
 }
 
 void Spiking::initLocalInhibition(float strength)
 {
-    for(int a = 0; a < (int)w_laterial.size(); a++){
-		for(int c = 0; c < w_laterial[a]->channels; c++){
-			for(int i = 0; i < w_laterial[a]->rows; i++){
-				for(int j = 0; j < w_laterial[a]->cols; j++){
-                    if(i == j)  continue;
-					w_laterial[a]->set(i, j, c, -1*strength);
-				}
-			}
-		}
-		w_laterial[a]->toGpu();
+    assert(w_laterial != NULL);
+    for(int c = 0; c < w_laterial->channels; c++){
+        for(int i = 0; i < w_laterial->rows; i++){
+            for(int j = 0; j < w_laterial->cols; j++){
+                if(i == j)  continue;
+                w_laterial->set(i, j, c, -1*strength);
+            }
+        }
     }
+    w_laterial->toGpu();
 }
 
 /* the device function to realize: weights * spikes(:, t - 1) + recurrent_weights * o_spikes(t - 1)
  * I only consider the first order dynamics 
- * inputDim  : number of input neurons
- * outputDim : number of output neurons
+ * inputSize  : number of input neurons
+ * outputSize : number of output neurons
 */
 __device__ float d_Spiking_accumulate_spikes(
-    int inputDim,
-    int outputDim,
+    int inputSize,
+    int outputSize,
     float* input_response,
     bool* output,
     int o_idx,
@@ -1375,7 +1185,7 @@ __device__ float d_Spiking_accumulate_spikes(
     int endTime)
 {
     int idx = threadIdx.x;
-    if(idx >= outputDim * inputDim){
+    if(idx >= outputSize * inputSize){
         return 0;
     }  
     float response = 0.0f;
@@ -1389,8 +1199,8 @@ __device__ float d_Spiking_accumulate_spikes(
 
     if(weights_lat != NULL){
         // effect from the recurrent connections:
-        for(int i = 0; i < outputDim; ++i)
-            response += output[i + (t - 1) * outputDim] ? weights_lat[i + o_idx * outputDim] : 0;
+        for(int i = 0; i < outputSize; ++i)
+            response += output[i + (t - 1) * outputSize] ? weights_lat[i + o_idx * outputSize] : 0;
     }
 
     return response;
@@ -1399,8 +1209,8 @@ __device__ float d_Spiking_accumulate_spikes(
 
 /* given each input and output spike train, 
  * compute the accumulative synaptic effect as the gradient
- * input: input spikes: endTime * inputDim
- * output: output spikes: endTime * outputDim
+ * input: input spikes: endTime * inputSize
+ * output: output spikes: endTime * outputSize
  */
 __device__ float d_Spiking_gradient(
     bool* output,
@@ -1408,8 +1218,8 @@ __device__ float d_Spiking_gradient(
     float delta,
     int o_idx,
     int i_idx,
-    int outputDim,
-    int inputDim,
+    int outputSize,
+    int inputSize,
     int endTime,
     int T_REFRAC,
     float TAU_M,
@@ -1418,13 +1228,13 @@ __device__ float d_Spiking_gradient(
     float acc_response = 0.0f;
     int t_post_last = 1;
     for(int t_post = 1; t_post < endTime; t_post++){
-        if(output[o_idx + t_post * outputDim] != true) continue;
+        if(output[o_idx + t_post * outputSize] != true) continue;
         float sum = 0.0f;
 
         int ub = t_post;
         int lb = max(1, int(t_post - 4*TAU_M));
         for(int t_pre = lb; t_pre < ub; ++t_pre){
-            if(input[i_idx + t_pre * inputDim] != true)    continue;
+            if(input[i_idx + t_pre * inputSize] != true)    continue;
             int pre_time = t_pre + T_REFRAC;
             if(pre_time > t_post)   continue;
             int s = t_post - t_post_last;
@@ -1442,8 +1252,8 @@ __device__ float d_Spiking_gradient(
 
 /* given each input and output spike train of spike times, 
  * compute the accumulative synaptic effect as the gradient
- * input: input spikes: endTime * inputDim
- * output: output spikes: endTime * outputDim
+ * input: input spikes: endTime * inputSize
+ * output: output spikes: endTime * outputSize
  */
 __device__ float d_Spiking_gradient_spiketime(
     int* output_time,
@@ -1454,14 +1264,14 @@ __device__ float d_Spiking_gradient_spiketime(
     int o_idx,
     int i_idx,
     float lat_factor,
-    int outputDim,
-    int inputDim,
+    int outputSize,
+    int inputSize,
     int endTime,
     int T_REFRAC,
     float TAU_M,
     float TAU_S)
 {
-    float acc_response = d_Spiking_accumulate_effect(output_time, input_time, n_ospikes, n_ispikes, o_idx, i_idx, outputDim, inputDim, endTime, T_REFRAC, TAU_M, TAU_S);
+    float acc_response = d_Spiking_accumulate_effect(output_time, input_time, n_ospikes, n_ispikes, o_idx, i_idx, outputSize, inputSize, endTime, T_REFRAC, TAU_M, TAU_S);
     float delta_w = delta * acc_response * lat_factor;
     return delta_w;
  
@@ -1469,8 +1279,8 @@ __device__ float d_Spiking_gradient_spiketime(
 
 
 /* compute the gradient for the bias
- * input: input spikes: endTime * inputDim
- * output: output spikes: endTime * outputDim
+ * input: input spikes: endTime * inputSize
+ * output: output spikes: endTime * outputSize
  */
 __device__ float d_Spiking_bias_gradient_spiketime(
     int* output_time,
@@ -1478,7 +1288,7 @@ __device__ float d_Spiking_bias_gradient_spiketime(
     float delta,
     int o_idx,
     int dummyFreq,
-    int outputDim,
+    int outputSize,
     int endTime,
     int T_REFRAC,
     float TAU_M,
@@ -1594,15 +1404,15 @@ __global__ void g_getDelta_output(float* outputDelta, int* fireCount, float* gro
 
 /*
  * dim3 block = dim3(batch);
- * dim3 thread= dim3(outputDim);
+ * dim3 thread= dim3(outputSize);
  */
 __global__ void g_boostWeight_output(float* outputDelta, float* sample_weights, int len)
 {
     int batchId = blockIdx.x;
     float sample_weight = sample_weights[batchId];
-    int outputDim = blockDim.x;
+    int outputSize = blockDim.x;
     int tid = threadIdx.x;
-    int target = tid + batchId * outputDim;
+    int target = tid + batchId * outputSize;
     if(target < len)
         outputDelta[target] *= sample_weight;
 
@@ -1610,8 +1420,8 @@ __global__ void g_boostWeight_output(float* outputDelta, float* sample_weights, 
 
 
 /*
- * dim3 block = dim3(batch, outputDim);
- * dim3 thread= min(1024, outputDim);
+ * dim3 block = dim3(batch, outputSize);
+ * dim3 thread= min(1024, outputSize);
  */
 __global__ void g_getLateralFactor_output(
     int* outputs_time,
@@ -1620,7 +1430,7 @@ __global__ void g_getLateralFactor_output(
     int* y,
     float* batchLFactor,
     float vth,
-    int outputDim,
+    int outputSize,
     int endTime,
     int T_REFRAC,
     float TAU_M,
@@ -1634,29 +1444,29 @@ __global__ void g_getLateralFactor_output(
     int batchId = blockIdx.x;
     int j_idx   = blockIdx.y;
     
-    int outputSize2 = endTime * outputDim;
+    int outputSize2 = endTime * outputSize;
     int* output_time = outputs_time + batchId * outputSize2;
-    int* output_fireCount = batchFireCount + batchId * outputDim;
+    int* output_fireCount = batchFireCount + batchId * outputSize;
     int cls = y[batchId];
 
-    float * lateral_factors = batchLFactor + batchId * outputDim;
+    float * lateral_factors = batchLFactor + batchId * outputSize;
 
     int f_cnt_j = output_fireCount[j_idx];
     float d_j = (f_cnt_j > 0 || (f_cnt_j == 0 && j_idx == cls)) ? 1 / vth : 0;
 
-    for(int i = 0; i < outputDim; i += blockDim.x)
+    for(int i = 0; i < outputSize; i += blockDim.x)
     {
         int l_idx = i + tid;
-        if(l_idx < outputDim && j_idx != l_idx)
+        if(l_idx < outputSize && j_idx != l_idx)
         {
             int f_cnt_l = output_fireCount[l_idx];
             float d_l = (f_cnt_l > 0 || (f_cnt_l == 0 && l_idx == cls)) ? 1 / vth : 0;
             // j --> l
-            float e_jl = d_Spiking_accumulate_effect(output_time, output_time, f_cnt_l, f_cnt_j, l_idx, j_idx, outputDim, outputDim, endTime, T_REFRAC, TAU_M, TAU_S);
+            float e_jl = d_Spiking_accumulate_effect(output_time, output_time, f_cnt_l, f_cnt_j, l_idx, j_idx, outputSize, outputSize, endTime, T_REFRAC, TAU_M, TAU_S);
             float effect_ratio_jl = (f_cnt_j == 0 || f_cnt_l == 0) ? 1 : e_jl / f_cnt_j;
             
             // l --> j
-            float e_lj = d_Spiking_accumulate_effect(output_time, output_time, f_cnt_j, f_cnt_l, j_idx, l_idx, outputDim, outputDim, endTime, T_REFRAC, TAU_M, TAU_S);
+            float e_lj = d_Spiking_accumulate_effect(output_time, output_time, f_cnt_j, f_cnt_l, j_idx, l_idx, outputSize, outputSize, endTime, T_REFRAC, TAU_M, TAU_S);
             float effect_ratio_lj = (f_cnt_l == 0 || f_cnt_j == 0) ? 1 : e_lj / f_cnt_l;
 
             d_sum[tid] += effect_ratio_jl * d_l * effect_ratio_lj * d_j; 
@@ -1682,7 +1492,7 @@ __global__ void g_getLateralFactor_output(
 
 /*
  * dim3 block = dim3(batch);
- * dim3 thread= dim3(outputDim);
+ * dim3 thread= dim3(outputSize);
  */
 __global__ void g_getMaxCount(int* fireCount, int* maxCount, int cols)
 {
@@ -1721,29 +1531,31 @@ __global__ void g_getMaxCount(int* fireCount, int* maxCount, int cols)
 
 
 /*
- * dim3 block = dim3(batch, outputAmount);
- * dim3 thread= dim3(min(1024, outputDim));
+ * dim3 block = dim3(batch);
+ * dim3 thread= dim3(min(1024, outputSize));
  */
-__global__ void g_modifySpikes(bool* outputs, int* y, int* fireCount, int target_level, int endTime, int outputDim)
+__global__ void g_modifySpikes(bool* outputs, int* y, int* fireCount, int target_level, int endTime, int outputSize)
 {
     int batchId = blockIdx.x;
     int target = y == NULL ? -1 : y[batchId];
-    int mCnt = target_level; //maxCount[batchId]; 
-    bool* outputSpikes = outputs + batchId * endTime * outputDim;
-    for(int id = 0; id < outputDim; id += blockDim.x){
+    int mCnt = target_level; 
+    bool* outputSpikes = outputs + batchId * endTime * outputSize;
+    for(int id = 0; id < outputSize; id += blockDim.x){
         int o_idx = id + threadIdx.x;
-        if(o_idx < outputDim)
+        if(o_idx < outputSize)
         {
-            if(fireCount[o_idx + batchId * outputDim] == 0)
+            if(o_idx != target)
+                return;
+            if(fireCount[o_idx + batchId * outputSize] == 0)
             {
                 int count = 0;
-                int interval = (mCnt == 0 || target != o_idx) ? endTime - 1 : endTime / mCnt;
+                int interval = endTime / mCnt;
                 for(int t = interval; t < endTime; t += interval)
                 {
-                    outputSpikes[o_idx + t * outputDim] = true;
+                    outputSpikes[o_idx + t * outputSize] = true;
                     count++;
                 }
-                fireCount[o_idx + batchId * outputDim] = count;
+                fireCount[o_idx + batchId * outputSize] = count;
             }
         }
     }
@@ -1751,21 +1563,19 @@ __global__ void g_modifySpikes(bool* outputs, int* y, int* fireCount, int target
 
 
 /*
- * dim3 block = dim3(batch, div);
- * dim3 thread= dim3(min(outputDim, 1024), min(1024/ outputDim, outputAmount)));
+ * dim3 block = dim3(batch);
+ * dim3 thread= dim3(min(outputSize, 1024));
  */
 __global__ void g_Spiking_feedforward(
     float* inputs_resp,
-	float** ws,
-	float** ws_lat,
-    float** bs,
+	float* w,
+	float* w_l,
+    float* b,
 	bool*  outputs,
     int* fireCount,
-	int inputDim,
-	int outputDim,
+	int inputSize,
+	int outputSize,
     int endTime,
-	int inputAmount,
-	int outputAmount,
     float vth,
     int dummyFreq, 
     int T_REFRAC,
@@ -1773,25 +1583,17 @@ __global__ void g_Spiking_feedforward(
     float TAU_S)
 {
 	int batchId = blockIdx.x;
-	int ok = blockIdx.y * blockDim.y + threadIdx.y;
-	if(ok >= outputAmount) return;
+    int outputSize2 = endTime * outputSize;
 
-    int outputSize2 = endTime * outputDim;
-    int outputArea  = endTime * outputDim;
-    int inputArea   = endTime * inputDim;
-
-	bool* curOutput    = outputs + ok * outputArea + batchId * outputSize2 * outputAmount;
-    float* curInput     = inputs_resp + ok * inputArea + batchId * outputSize2 * outputAmount;
-    int* curFireCount = fireCount + ok * outputDim + batchId * outputDim * outputAmount; 
-    float* w = ws[ok];
-    float* w_l = ws_lat == NULL ? NULL : ws_lat[ok];
-    float* b = bs[ok];
+	bool* curOutput   = outputs + batchId * outputSize2;
+    float* curInput   = inputs_resp + batchId * outputSize2;//inputs_resp:batch * outputSize*endTime 
+    int* curFireCount = fireCount + batchId * outputSize; 
 
     // simulate the spiking train
-    for(int tidx = 0; tidx < outputDim; tidx += blockDim.x)
+    for(int tidx = 0; tidx < outputSize; tidx += blockDim.x)
     {
         int o_idx = tidx + threadIdx.x;
-        if(o_idx < outputDim)
+        if(o_idx < outputSize)
         {
             float v  = 0.0f;
             float ep = 0.0f;
@@ -1805,13 +1607,13 @@ __global__ void g_Spiking_feedforward(
                 ep -= ep / TAU_S;
                 if(t == 0)
                 {
-                    curOutput[o_idx + t * outputDim] = false;
+                    curOutput[o_idx + t * outputSize] = false;
                     continue;
                 }
 
                 // 2. receive the spike inputs
                 __syncthreads(); // make sure all the threads has generated the spikes for the last time step
-                response = d_Spiking_accumulate_spikes(inputDim, outputDim, curInput, curOutput, o_idx, w, w_l, b, t, dummyFreq, endTime);
+                response = d_Spiking_accumulate_spikes(inputSize, outputSize, curInput, curOutput, o_idx, w, w_l, b, t, dummyFreq, endTime);
                 
                 // 3. Add up the response to ep (state variable)
                 ep += response;
@@ -1824,7 +1626,7 @@ __global__ void g_Spiking_feedforward(
                 }
             
                 // 5. Fire or not
-                curOutput[o_idx + t * outputDim] = v > threshold ?  true : false;
+                curOutput[o_idx + t * outputSize] = v > threshold ?  true : false;
                 t_ref = v > threshold ? T_REFRAC : t_ref;
                 fire_count += v > threshold ? 1 : 0;
                 v = v > threshold ? 0 : v;
@@ -1836,16 +1638,16 @@ __global__ void g_Spiking_feedforward(
 
 
 /*
- * dim3 block = dim3(batch, inputDim, outputAmount);
- * dim3 thread= min(1024, outputDim);
+ * dim3 block = dim3(batch, inputSize);
+ * dim3 thread= min(1024, outputSize);
  */
 __global__ void g_Spiking_wgrad(
         bool* inputs,
         bool* outputs,
         float* curDelta,
-        float** wgradTmp,
-        int inputDim,
-        int outputDim,
+        float* wgradTmp,
+        int inputSize,
+        int outputSize,
         int endTime,
         int T_REFRAC,
         float TAU_M,
@@ -1853,77 +1655,75 @@ __global__ void g_Spiking_wgrad(
 {
     int batchId = blockIdx.x;
     int i_idx   = blockIdx.y;
-    int ok      = blockIdx.z;
 
-    int wSize        = outputDim * inputDim;
-    int inputSize2   = endTime * inputDim;
-    int outputSize2  = endTime * outputDim;
-    int curDeltaSize = outputDim;
+    int wSize        = outputSize * inputSize;
+    int inputSize2   = endTime * inputSize;
+    int outputSize2  = endTime * outputSize;
+    int curDeltaSize = outputSize;
 
-    float* wgrad  = wgradTmp[ok] + batchId * wSize;
+    float* wgrad  = wgradTmp + batchId * wSize;
     bool* input    = inputs + batchId * inputSize2;
     bool* output   = outputs + batchId * outputSize2;
     float* cDelta = curDelta + batchId * curDeltaSize;
     
-    for(int i = 0; i < outputDim; i += blockDim.x)
+    for(int i = 0; i < outputSize; i += blockDim.x)
     {
         int o_idx = i + threadIdx.x;
-        if(o_idx < outputDim)
+        if(o_idx < outputSize)
         {
-            float delta_w = d_Spiking_gradient(output, input, cDelta[o_idx], o_idx, i_idx, outputDim, inputDim, endTime, T_REFRAC, TAU_M, TAU_S);
-            wgrad[i_idx + o_idx * inputDim] = delta_w;
+            float delta_w = d_Spiking_gradient(output, input, cDelta[o_idx], o_idx, i_idx, outputSize, inputSize, endTime, T_REFRAC, TAU_M, TAU_S);
+            wgrad[i_idx + o_idx * inputSize] = delta_w;
         }
     }
 
 }
 
 /*
- * dim3 block = dim3(batch, inputDim, outputAmount);
- * dim3 thread= min(1024, outputDim);
+ * dim3 block = dim3(batch, inputSize);
+ * dim3 thread= min(1024, outputSize);
  */
 __global__ void g_Spiking_wgrad_spiketime(
         float* batchAccEffect,
         float* curDelta,
         float* latFactor,
-        float** wgradTmp,
-        int inputDim,
-        int outputDim)
+        float* wgradTmp,
+        int inputSize,
+        int outputSize)
 {
     int batchId = blockIdx.x;
     int i_idx   = blockIdx.y;
-    int ok      = blockIdx.z;
 
-    int wSize        = outputDim * inputDim;
-    int curDeltaSize = outputDim;
+    int wSize        = outputSize * inputSize;
+    int curDeltaSize = outputSize;
 
-    float* wgrad  = wgradTmp[ok] + batchId * wSize;
+    float* wgrad  = wgradTmp + batchId * wSize;
     float* acc_effect     = batchAccEffect + batchId * wSize;
     float* cDelta = curDelta + batchId * curDeltaSize;
     float* lFactor = latFactor == NULL ? NULL : latFactor + batchId * curDeltaSize;
 
-    for(int i = 0; i < outputDim; i += blockDim.x)
+    for(int i = 0; i < outputSize; i += blockDim.x)
     {
         int o_idx = i + threadIdx.x;
-        if(o_idx < outputDim)
+        if(o_idx < outputSize)
         {
             float latFac = lFactor == NULL ? 1.0f : lFactor[o_idx];
-            float delta_w = cDelta[o_idx] * acc_effect[i_idx + o_idx * inputDim] * latFac;
+            float delta_w = cDelta[o_idx] * acc_effect[i_idx + o_idx * inputSize] * latFac;
 
-            wgrad[i_idx + o_idx * inputDim] = delta_w;
+            wgrad[i_idx + o_idx * inputSize] = delta_w;
         }
     }
 }
 
 /*
  * dim3 block = dim3(batch);
- * dim3 thread= dim3(min(1024, outputDim));
+ * dim3 thread= dim3(min(1024, outputSize));
  */
 __global__ void g_Spiking_bgrad_spiketime(
         int* outputs_time,
         int* batchFireCount,
         float* curDelta,
-        float** bgradTmp,
-        int outputDim,
+        float* bgradTmp,
+        int outputSize,
         int endTime,
         int dummyFreq,
         int T_REFRAC,
@@ -1931,23 +1731,22 @@ __global__ void g_Spiking_bgrad_spiketime(
         float TAU_S)
 {
     int batchId = blockIdx.x;
-    int ok      = 0;
 
-    int bSize = outputDim;
-    int outputSize2  = endTime * outputDim;
-    int curDeltaSize = outputDim;
+    int bSize = outputSize;
+    int outputSize2  = endTime * outputSize;
+    int curDeltaSize = outputSize;
 
-    float* bgrad  = bgradTmp[ok] + batchId * bSize;
+    float* bgrad  = bgradTmp + batchId * bSize;
     int* output_time      = outputs_time + batchId * outputSize2;
-    int* output_fireCount = batchFireCount + batchId * outputDim;
+    int* output_fireCount = batchFireCount + batchId * outputSize;
     float* cDelta = curDelta + batchId * curDeltaSize;
     
-    for(int i = 0; i < outputDim; i += blockDim.x)
+    for(int i = 0; i < outputSize; i += blockDim.x)
     {
         int o_idx = i + threadIdx.x;
-        if(o_idx < outputDim)
+        if(o_idx < outputSize)
         {
-            float delta_b = d_Spiking_bias_gradient_spiketime(output_time, output_fireCount[o_idx], cDelta[o_idx], o_idx, dummyFreq, outputDim, endTime, T_REFRAC, TAU_M, TAU_S);
+            float delta_b = d_Spiking_bias_gradient_spiketime(output_time, output_fireCount[o_idx], cDelta[o_idx], o_idx, dummyFreq, outputSize, endTime, T_REFRAC, TAU_M, TAU_S);
             bgrad[o_idx] = delta_b;
         }
     }
@@ -1956,8 +1755,8 @@ __global__ void g_Spiking_bgrad_spiketime(
 
 
 /*
- * dim3 block = dim3(batch, inputDim);
- * dim3 thread= min(1024, outputDim);
+ * dim3 block = dim3(batch, inputSize);
+ * dim3 thread= min(1024, outputSize);
  */
 __global__ void g_Spiking_synaptic_effect(
         int* inputs_time,
@@ -1967,8 +1766,8 @@ __global__ void g_Spiking_synaptic_effect(
         float* w,
         float* batchAccEffect,
         float* effectRatio,
-        int inputDim,
-        int outputDim,
+        int inputSize,
+        int outputSize,
         int endTime,
         int T_REFRAC,
         float TAU_M,
@@ -1977,28 +1776,28 @@ __global__ void g_Spiking_synaptic_effect(
     int batchId = blockIdx.x;
     int i_idx   = blockIdx.y;
 
-    int wSize        = outputDim * inputDim;
-    int inputSize2   = endTime * inputDim;
-    int outputSize2  = endTime * outputDim;
+    int wSize        = outputSize * inputSize;
+    int inputSize2   = endTime * inputSize;
+    int outputSize2  = endTime * outputSize;
 
     int* input_time       = inputs_time + batchId * inputSize2;
     int* output_time      = outputs_time + batchId * outputSize2;
-    int* input_fireCount  = batchPreFireCount + batchId * outputDim;
-    int* output_fireCount = batchFireCount + batchId * outputDim;
+    int* input_fireCount  = batchPreFireCount + batchId * outputSize;
+    int* output_fireCount = batchFireCount + batchId * outputSize;
     float* acc_effect     = batchAccEffect + batchId * wSize;
 
-    for(int i = 0; i < outputDim; i += blockDim.x)
+    for(int i = 0; i < outputSize; i += blockDim.x)
     {
         int o_idx = i + threadIdx.x;
-        if(o_idx < outputDim)
+        if(o_idx < outputSize)
         {
-            float e = d_Spiking_accumulate_effect(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], o_idx, i_idx, outputDim, inputDim, endTime, T_REFRAC, TAU_M, TAU_S);
-            acc_effect[i_idx + o_idx * inputDim] = e;
+            float e = d_Spiking_accumulate_effect(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], o_idx, i_idx, outputSize, inputSize, endTime, T_REFRAC, TAU_M, TAU_S);
+            acc_effect[i_idx + o_idx * inputSize] = e;
             if(effectRatio != NULL){
                 int o_cnt = output_fireCount[o_idx];
                 int i_cnt = input_fireCount[i_idx];
                 float ratio = i_cnt == 0 || o_cnt == 0 ? 1 : e / float(i_cnt);
-                effectRatio[i_idx + o_idx * inputDim] = ratio * w[i_idx + o_idx * inputDim];
+                effectRatio[i_idx + o_idx * inputSize] = ratio * w[i_idx + o_idx * inputSize];
             }
         }
     }
@@ -2006,35 +1805,35 @@ __global__ void g_Spiking_synaptic_effect(
 
 
 /*
- * dim3 block = dim3(batch, inputDim, outputAmount);
- * dim3 thread= min(1024, outputDim);
+ * dim3 block = dim3(batch, inputSize);
+ * dim3 thread= min(1024, outputSize);
  */
 __global__ void g_Spiking_debug_spiketime(
         int* inputs_time,
         int* outputs_time,
         int* batchPreFireCount,
         int* batchFireCount,
-        int inputDim,
-        int outputDim,
+        int inputSize,
+        int outputSize,
         int endTime)
 {
     int batchId = blockIdx.x;
     int i_idx   = blockIdx.y;
 
-    int inputSize2   = endTime * inputDim;
-    int outputSize2  = endTime * outputDim;
+    int inputSize2   = endTime * inputSize;
+    int outputSize2  = endTime * outputSize;
  
     int* input_time       = inputs_time + batchId * inputSize2;
     int* output_time      = outputs_time + batchId * outputSize2;
-    int* input_fireCount  = batchPreFireCount + batchId * outputDim;
-    int* output_fireCount = batchFireCount + batchId * outputDim;
+    int* input_fireCount  = batchPreFireCount + batchId * outputSize;
+    int* output_fireCount = batchFireCount + batchId * outputSize;
 
-    for(int i = 0; i < outputDim; i += blockDim.x)
+    for(int i = 0; i < outputSize; i += blockDim.x)
     {
         int o_idx = i + threadIdx.x;
-        if(o_idx < outputDim)
+        if(o_idx < outputSize)
         {
-            if(i_idx == 154 && o_idx == 56){
+            if(i_idx == 7 && o_idx == 5){
                 printf("%d fires: ", i_idx);
                 for(int i = 0; i < input_fireCount[i_idx]; i++)    printf("%d\t", input_time[i_idx * endTime + i]);
                 printf("\n");
