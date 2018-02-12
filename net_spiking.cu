@@ -12,6 +12,8 @@
 #include "common/cuBase.h"
 #include "layers/LayerBase.h"
 #include "layers/DataLayerSpiking.h"
+#include "layers/ConvSpiking.h"
+#include "layers/PoolingSpiking.h"
 #include "layers/Spiking.h"
 #include "layers/SoftMaxSpiking.h"
 #include <queue>
@@ -77,6 +79,12 @@ void buildSpikingNetwork(int trainLen, int testLen)
         if(top->m_type == std::string("DATASPIKING")){
             new DataLayerSpiking(top->m_name);
         }
+        else if(top->m_type == std::string("CONVSPIKING")){
+            new ConvSpiking(top->m_name);
+        }
+        else if(top->m_type == std::string("POOLINGSPIKING")){
+            new PoolingSpiking(top->m_name);
+        } 
         else if(top->m_type == std::string("SPIKING")){
             new Spiking(top->m_name);
         }
@@ -231,7 +239,6 @@ void getSpikingNetworkCost(int* y, float* weights, int* vote, int start)
     outputPredict(vote, start);
 
     /*backpropagation*/
-    bool has_dynamic_threshold = Config::instance()->hasDynamicThreshold(); 
     for(int i = (int)spiking_que.size() - 1; i >=0; i--){
         ConfigBase* top = spiking_que[i];
         if(top->m_name == std::string("reservoir")) continue;
@@ -241,11 +248,6 @@ void getSpikingNetworkCost(int* y, float* weights, int* vote, int start)
         layer->backpropagation();
         layer->getGrad();
         layer->updateWeight();
-        if(has_dynamic_threshold && top->m_name != std::string("output"))
-        {
-            layer->getDeltaVth();
-            layer->updateVth();
-        }
     }
     cudaStreamSynchronize(Layers::instance()->get_stream());
     getLastCudaError("updateWB");
@@ -373,8 +375,7 @@ void __global__ g_boostWeightUpdate(float* weights, bool* predictions, int* y, i
 void verifyResult(std::string phrase)
 {
     for(int i = 0; i < (int)spiking_que.size(); i++){
-        if(spiking_que[i]->m_name == "data")    continue;
-        Spiking* layer = (Spiking*)Layers::instance()->get(spiking_que[i]->m_name);
+        SpikingLayerBase* layer = (SpikingLayerBase*) Layers::instance()->get(spiking_que[i]->m_name);
         layer->verify(phrase);
     }
 }
@@ -503,7 +504,6 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
         Momentum = nMomentum[id];
         Config::instance()->setLrate(lrate);
         Config::instance()->setMomentum(Momentum);
-
         float start, end;
         start = (float)clock();
         if(Config::instance()->applyPreproc()){

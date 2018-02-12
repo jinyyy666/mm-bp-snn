@@ -751,8 +751,9 @@ Config::read_2_string(string File_name){
     FILE *pFile = NULL;   
     char logStr[1025];
     if(!(pFile = fopen(File_name.c_str(),"r"))){
-        sprintf(logStr, "Can not find this file.");
-        return 0;
+        sprintf(logStr, "Cannot find the Config file: %s!", File_name.c_str());
+        LOG(logStr, "Result/log.txt");
+        exit(EXIT_FAILURE);
     }
     //move pointer to the end of the file
     fseek(pFile, 0, SEEK_END);

@@ -25,9 +25,11 @@
 #include "common/track.h"
 #include "layers/Pooling.h"
 
-#define VERIFY
+//#define VERIFY
 //#define VERIFY_RESERVOIR
 //#define SOFTMAX_SPIKING
+//#define SPIKING_CNN
+#define VERIFY_SPIKING_CNN
 
 void runMnist();
 void runCifar10();
@@ -45,7 +47,7 @@ std::vector<int> g_argv;
 int main (int argc, char** argv)
 {
     //cudaDeviceReset();
-    cudaSetDevice(0);
+    cudaSetDevice(1);
 #ifdef linux
     signal(SIGSEGV, handler);   // install our handler
 #endif
@@ -55,7 +57,7 @@ int main (int argc, char** argv)
 		g_argv.push_back(atoi(argv[2]));
 	}
 	printf("1. MNIST\n2. CIFAR-10\n3. CHINESE\n4. CIFAR-100\n5. VOTE MNIST\n6. NMnist\n7. Spiking Mnist\n8. Spoken English Letter\nChoose the dataSet to run:");
-	int cmd = 6;
+	int cmd = 7;
     /*
 	if(g_argv.size() >= 2)
 		cmd = g_argv[0];
@@ -474,6 +476,10 @@ void runSpikingMnist(){
 	Config * config = Config::instance();
 #if   defined(VERIFY)
     config->initPath("Config/SpikingMnistConfig_test.txt");
+#elif     defined(VERIFY_SPIKING_CNN)
+    config->initPath("Config/SpikingCNNMnistConfig_test.txt");
+#elif   defined(SPIKING_CNN)
+    config->initPath("Config/SpikingCNNMnistConfig.txt");
 #else
     config->initPath("Config/SpikingMnistConfig.txt");
 #endif
@@ -483,7 +489,7 @@ void runSpikingMnist(){
     int end_time = config->getEndTime();
     int train_samples = config->getTrainSamples();
     int test_samples = config->getTestSamples();
-#if defined(VERIFY)
+#if defined(VERIFY) || defined(VERIFY_SPIKING_CNN)
     read_dumped_input_inside(config->getTrainPath(), trainX, end_time, input_neurons);
     std::vector<int> my_label(1, 5);
     trainY = new cuMatrix<int>(1, 1, 1);
@@ -529,8 +535,10 @@ void runSpikingMnist(){
 	std::vector<float> nlrate;
 	std::vector<float> nMomentum;
 	std::vector<int> epoCount;
-#ifdef VERIFY
+#if defined(VERIFY)
 	nlrate.push_back(0.00001f);   nMomentum.push_back(0.00f);  epoCount.push_back(1);
+#elif defined(VERIFY_SPIKING_CNN)
+	nlrate.push_back(0.001f);   nMomentum.push_back(0.00f);  epoCount.push_back(1);
 #else
     int epochs = Config::instance()->getTestEpoch();
     for(int i = 0; i < epochs; ++i){
@@ -610,7 +618,10 @@ void runSpeech(){
 #ifdef VERIFY
 	nlrate.push_back(0.00001f);   nMomentum.push_back(0.00f);  epoCount.push_back(1);
 #else
-	nlrate.push_back(0.00001f);   nMomentum.push_back(0.00f);  epoCount.push_back(10);
+    int epochs = Config::instance()->getTestEpoch();
+    for(int i = 0; i < epochs; ++i){
+        nlrate.push_back(0.001f/sqrt(i+1)); nMomentum.push_back(0.90f);  epoCount.push_back(1);
+    }
 #endif
 
 	start = clock();

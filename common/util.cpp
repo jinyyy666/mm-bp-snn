@@ -362,7 +362,7 @@ void readSpikesFromDumpfile(const std::string& filename, cuMatrix<bool>*& x){
 
     char logStr[256];
     if(file == NULL){
-        sprintf(logStr, "Cannot open file: %s", filename.c_str());  LOG(logStr, "Result/log.txt");
+        sprintf(logStr, "Cannot open file: %s\n", filename.c_str());  LOG(logStr, "Result/log.txt");
         assert(0);
     }
  
