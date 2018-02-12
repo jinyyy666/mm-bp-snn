@@ -4,15 +4,14 @@
 #include "../common/util.h"
 
 /*
-*	blocks : dim3(batch, outputAmount),
-*	threads: dim3(min(outputDim * outputDim, 1024));
-*/
-__global__ void g_ConvSpiking_feedforward(
+ * blocks  : dim3(batch, div, endTime);
+ * threads :  dim3(min(outputDim * outputDim, 1024), remain));
+ */
+__global__ void g_ConvSpiking_fast_input_response(
         bool*  inputs,
         float** ws,
         float** bs,
-        bool*  outputs,
-        int* fireCount,
+        float*  inputs_resp,
         int inputDim,
         int kernelSize,
         int padding,
@@ -21,6 +20,20 @@ __global__ void g_ConvSpiking_feedforward(
         int inputAmount,
         int outputAmount,
         int inputArea,
+        int responseArea);
+
+
+/*
+*	blocks : dim3(batch, outputAmount),
+*	threads: dim3(min(outputDim * outputDim, 1024));
+*/
+__global__ void g_ConvSpiking_feedforward(
+        float*  inputs_resp,
+        bool*  outputs,
+        int* fireCount,
+        int outputDim,
+        int endTime,
+        int outputAmount,
         int outputArea,
         float vth,
         int T_REFRAC,
@@ -102,17 +115,14 @@ void ConvSpiking::feedforward()
 
     int outputDim2 = outputDim * outputDim;
     int remain = min(1024 / outputDim2, outputAmount); //1
-    dim3 thread= dim3(min(outputDim2, 1024), remain);
-
     int div = (outputAmount + remain - 1) / remain;//32
-    dim3 block = dim3(batch, div);
 
-    g_ConvSpiking_feedforward<<<block, thread>>>(
-        inputs->getDev(),
+    // fast input response: compute the convolved spikes for each time step
+    g_ConvSpiking_fast_input_response<<<dim3(batch, div, endTime), dim3(min(outputDim2, 1024), remain)>>>(
+        inputs->getDev(), 
         w.m_devPoint,
         b.m_devPoint,
-        outputs->getDev(),
-        fireCount->getDev(),
+        inputs_resp->getDev(),
         inputDim,
         kernelSize,
         padding,
@@ -121,6 +131,20 @@ void ConvSpiking::feedforward()
         inputAmount,
         outputAmount,
         inputs->getArea(),
+        inputs_resp->getArea());
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("ConvSpiking::g_ConvSpiking_fast_input_response");
+
+    dim3 thread= dim3(min(outputDim2, 1024), remain);
+    dim3 block = dim3(batch, div);
+    
+    g_ConvSpiking_feedforward<<<block, thread>>>(
+        inputs_resp->getDev(),
+        outputs->getDev(),
+        fireCount->getDev(),
+        outputDim,
+        endTime,
+        outputAmount,
         outputs->getArea(),
         threshold,
         T_REFRAC,
@@ -395,6 +419,7 @@ ConvSpiking::ConvSpiking(std::string name)
 
     outputs  = new cuMatrix<bool>(batch, endTime * outputDim * outputDim, outputAmount);
     outputs_time = new cuMatrix<int>(batch, outputDim * outputDim * endTime, outputAmount);
+    inputs_resp = new cuMatrix<float>(batch, outputDim * outputDim * endTime, outputAmount);
 
 	curDelta = new cuMatrix<float>(batch, outputDim * outputDim, outputAmount);
     fireCount= new cuMatrix<int>(batch, outputDim * outputDim, outputAmount);
@@ -656,7 +681,7 @@ __device__ float d_ConvSpiking_accumulate_spikes(
                 int yy = y + j - padding;
                 if(xx >= 0 && xx < inputDim && yy >= 0 && yy < inputDim){
                     int i_idx = xx * inputDim + yy;
-                    response += curInput[i_idx + (t - 1) * inputSize2] ?  w[i * kernelSize + j] : 0;
+                    response += curInput[i_idx + t * inputSize2] ?  w[i * kernelSize + j] : 0;
                 }
             }
         }
@@ -665,15 +690,14 @@ __device__ float d_ConvSpiking_accumulate_spikes(
 }
 
 /*
- * dim3 block = dim3(batch, div);
+ * dim3 block = dim3(batch, div, endTime);
  * dim3 thread= dim3(min(outputDim * outputDim, 1024), remain));
  */
-__global__ void g_ConvSpiking_feedforward(
+__global__ void g_ConvSpiking_fast_input_response(
         bool*  inputs,
         float** ws,
         float** bs,
-        bool*  outputs,
-        int* fireCount,
+        float*  inputs_resp,
         int inputDim,
         int kernelSize,
         int padding,
@@ -682,6 +706,38 @@ __global__ void g_ConvSpiking_feedforward(
         int inputAmount,
         int outputAmount,
         int inputArea,
+        int responseArea)
+{
+    int batchId = blockIdx.x;
+    int t = blockIdx.z;
+    int ok = blockIdx.y * blockDim.y + threadIdx.y;
+    if(ok >= outputAmount)return;
+    int outputSize2 = outputDim * outputDim;
+
+    float* curResp = inputs_resp + ok * responseArea + batchId * outputSize2 * endTime;
+    for(int tidx = 0; tidx < outputSize2; tidx += blockDim.x)
+    {
+        int o_idx = tidx + threadIdx.x;
+        if(o_idx < outputSize2)
+        {
+            int x = o_idx / outputDim;
+            int y = o_idx % outputDim;
+            curResp[t + o_idx * endTime] = d_ConvSpiking_accumulate_spikes(inputDim, inputArea, inputAmount, kernelSize, inputs, x, y, padding, ok, batchId, ws, t, endTime);
+        }
+    }
+}
+
+/*
+ * dim3 block = dim3(batch, div);
+ * dim3 thread= dim3(min(outputDim * outputDim, 1024), remain));
+ */
+__global__ void g_ConvSpiking_feedforward(
+        float*  inputs_resp,
+        bool*  outputs,
+        int* fireCount,
+        int outputDim,
+        int endTime,
+        int outputAmount,
         int outputArea,
         float vth,
         int T_REFRAC,
@@ -695,14 +751,12 @@ __global__ void g_ConvSpiking_feedforward(
 
     bool* curOutput = outputs + ok * outputArea + batchId * outputSize2 * endTime;
     int*  curFireCount = fireCount + ok * outputArea / endTime + batchId * outputSize2; 
+    float* curResponse = inputs_resp + ok * outputArea + batchId * outputSize2 * endTime;
     for(int tidx = 0; tidx < outputSize2; tidx += blockDim.x)
     {
         int o_idx = tidx + threadIdx.x;
         if(o_idx < outputSize2)
         {
-            int x = o_idx / outputDim;
-            int y = o_idx % outputDim;
-
             float v  = 0.0f;
             float ep = 0.0f;
             float threshold = vth;
@@ -718,8 +772,8 @@ __global__ void g_ConvSpiking_feedforward(
                     curOutput[o_idx + t * outputSize2] = false;
                     continue;
                 }
-                // convolute the spikes
-                response = d_ConvSpiking_accumulate_spikes(inputDim, inputArea, inputAmount, kernelSize, inputs, x, y, padding, ok, batchId, ws, t, endTime);
+                // get the convoluted the spikes
+                response = curResponse[(t-1) + o_idx*endTime];
                 ep += response;
                 v += ep/TAU_S;
 
