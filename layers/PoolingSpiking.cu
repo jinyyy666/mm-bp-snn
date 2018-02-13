@@ -7,16 +7,25 @@
 #include "../common/cuBase.h"
 #include "../common/util.h"
 
-__global__ void g_PoolingSpiking_feedforward(
+__global__ void g_PoolingSpiking_fast_input_response(
 	bool* conv,
-	bool* pool,
-    int*  fireCount,
+    float* inputs_resp,
 	int convDim,
 	int poolDim,
     int endTime,
 	int poolingSkip,
 	int poolingSize,
-	int convArea,
+    int convArea,
+	int poolArea,
+	int kAmount);
+
+
+__global__ void g_PoolingSpiking_feedforward(
+	float* inputs_resp,
+	bool* pool,
+    int*  fireCount,
+	int poolDim,
+    int endTime,
 	int poolArea,
 	int kAmount,
     float vth,
@@ -88,19 +97,30 @@ void PoolingSpiking::feedforward()
 	int remain = 512 / threadx;
 	int div = (outputAmount + remain - 1) / remain;
 
-	dim3 block = dim3(batch, div);     // remain * div ~~= outputAmount / remain
-	dim3 thread= dim3(threadx, remain);
-
-    g_PoolingSpiking_feedforward<<<block, thread>>>(
+    // fast input response
+    g_PoolingSpiking_fast_input_response<<<dim3(batch, div, endTime), dim3(threadx, remain)>>>(
         inputs->getDev(),
-        outputs->getDev(),
-        fireCount->getDev(),
+        inputs_resp->getDev(),
         inputDim,
         outputDim,
         endTime,
         pskip,
         psize,
         inputs->getArea(),
+        inputs_resp->getArea(),
+        outputAmount);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("PoolSpiking::g_PoolingSpiking_fast_input_response");
+
+	dim3 block = dim3(batch, div);     // remain * div ~~= outputAmount / remain
+	dim3 thread= dim3(threadx, remain);
+
+    g_PoolingSpiking_feedforward<<<block, thread>>>(
+        inputs_resp->getDev(),
+        outputs->getDev(),
+        fireCount->getDev(),
+        outputDim,
+        endTime,
         outputs->getArea(),
         outputAmount,
         threshold,
@@ -178,6 +198,7 @@ PoolingSpiking::PoolingSpiking(std::string name)
 
 	outputs       = new cuMatrix<bool>(batch, endTime * outputDim * outputDim, outputAmount);
 	outputs_time  = new cuMatrix<int>(batch, outputDim * outputDim * endTime, outputAmount);
+    inputs_resp   = new cuMatrix<float>(batch, endTime * outputDim * outputDim, outputAmount);
 
 	curDelta = new cuMatrix<float>(batch, outputDim * outputDim, outputAmount);
     fireCount= new cuMatrix<int>(batch, outputDim * outputDim, outputAmount);
@@ -192,38 +213,31 @@ PoolingSpiking::PoolingSpiking(std::string name)
 
 
 /*
- * blocks : dim3(batch, outputAmount / remain), remain can be 1, 2, 16, or 64
- * threads: dim3(min(outputDim * outputDim, 512), remain);
+ * blocks : dim3(batch, outputAmount / remain, endTime), remain can be 1, 2, 16, or 64
+ * threads: dim3(min(outputDim * outputDim, 1024), remain);
  */
-__global__ void g_PoolingSpiking_feedforward(
+__global__ void g_PoolingSpiking_fast_input_response(
 	bool* conv,
-	bool* pool,
-    int*  fireCount,
+    float* inputs_resp,
 	int convDim,
 	int poolDim,
     int endTime,
 	int poolingSkip,
 	int poolingSize,
-	int convArea,
+    int convArea,
 	int poolArea,
-	int kAmount,
-    float vth,
-    int T_REFRAC,
-    float TAU_M,
-    float TAU_S)
+	int kAmount)
 {
 	int batchId = blockIdx.x;
 	int k  = blockIdx.y * blockDim.y + threadIdx.y;
+    int t = blockIdx.z;
 	if(k >= kAmount)return;
+    int convSize2  = convDim * convDim;
+    int poolSize2  = poolDim * poolDim;
 
-	int convSize2  = convDim * convDim;
-	int poolSize2  = poolDim * poolDim;
-
-	bool* curConv = conv   + convArea * k + batchId * convSize2 * endTime;
-	bool* curPool = pool   + poolArea * k + batchId * poolSize2 * endTime;
-    int* curFireCount = fireCount + k * poolArea / endTime + batchId * poolSize2;
-
-	/*pooling*/
+    bool* curConv = conv   + convArea * k + batchId * convSize2 * endTime;
+    float* curResponse = inputs_resp + poolArea * k + batchId * poolSize2 * endTime;
+   
 	for(int tidx = 0; tidx < poolSize2; tidx += blockDim.x)
 	{
 		int o_idx = tidx + threadIdx.x;
@@ -238,7 +252,54 @@ __global__ void g_PoolingSpiking_feedforward(
 
 			int lenx = min(convDim, curX + poolingSize);
 			int leny = min(convDim, curY + poolingSize);
+            float response = 0.0f;
+            for(int i = curX; i < lenx; i++){
+                for(int j = curY; j < leny; j++){
+                    int i_idx = i * convDim + j;
+                    float val = curConv[i_idx + t * convSize2];
+                    response += val;
+                }
+            }
+            curResponse[o_idx + t * poolSize2] = response;
+        }
+    }
 
+}
+
+
+/*
+ * blocks : dim3(batch, outputAmount / remain), remain can be 1, 2, 16, or 64
+ * threads: dim3(min(outputDim * outputDim, 512), remain);
+ */
+__global__ void g_PoolingSpiking_feedforward(
+	float* inputs_resp,
+	bool* pool,
+    int*  fireCount,
+	int poolDim,
+    int endTime,
+	int poolArea,
+	int kAmount,
+    float vth,
+    int T_REFRAC,
+    float TAU_M,
+    float TAU_S)
+{
+	int batchId = blockIdx.x;
+	int k  = blockIdx.y * blockDim.y + threadIdx.y;
+	if(k >= kAmount)return;
+
+	int poolSize2  = poolDim * poolDim;
+
+	float* curResp = inputs_resp  + poolArea * k + batchId * poolSize2 * endTime;
+	bool* curPool = pool   + poolArea * k + batchId * poolSize2 * endTime;
+    int* curFireCount = fireCount + k * poolArea / endTime + batchId * poolSize2;
+
+	/*pooling*/
+	for(int tidx = 0; tidx < poolSize2; tidx += blockDim.x)
+	{
+		int o_idx = tidx + threadIdx.x;
+		if(o_idx < poolSize2)
+		{
             float v  = 0.0f;
             float ep = 0.0f;
             float threshold = vth - 1e-6;
@@ -253,14 +314,7 @@ __global__ void g_PoolingSpiking_feedforward(
                     curPool[o_idx + t * poolSize2] = false;
                     continue;
                 }
-                response = 0.0f;
-                for(int i = curX; i < lenx; i++){
-                    for(int j = curY; j < leny; j++){
-                        int i_idx = i * convDim + j;
-                        float val = curConv[i_idx + (t - 1) * convSize2];
-                        response += val;
-                    }
-                }
+                response = curResp[o_idx + (t - 1) * poolSize2];
 
                 ep += response;
                 v += ep/TAU_S;  

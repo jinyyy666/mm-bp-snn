@@ -13,6 +13,7 @@ public:
 	~PoolingSpiking(){
 		delete outputs;
         delete outputs_time;
+        delete inputs_resp;
         delete curDelta;
         delete fireCount;
 	}
@@ -77,6 +78,7 @@ private:
 	cuMatrix<bool>*  inputs;
 	cuMatrix<float>* preDelta;
 	cuMatrix<bool>*  outputs;
+    cuMatrix<float>* inputs_resp;
 	cuMatrix<float>* curDelta; // size(curDelta) == size(outputs)
     cuMatrix<int>*    inputs_time;
     cuMatrix<int>*    outputs_time;
