@@ -19,6 +19,11 @@ BATCH_SIZE = 1;
 CHANNELS = 1;                   #1, 3, 4#
 END_TIME = 400;                 #The spike train duration#
 
+#CROP = 0;#                       #0<= crop <=imgSize#
+#SCALE = 12;#                   #12% of ImgSize#
+#ROTATION = 12;#                #angle#
+#DISTORTION = 3.4;#               #just for mnist#
+
 
 TRAIN_SAMPLES = 60000;              # number of train/test samples#
 TEST_SAMPLES = 10000;
@@ -32,7 +37,7 @@ NUM_NEURONS = 784;
 [
 LAYER = SPIKING;
 NAME  = hidden_0;
-NUM_NEURONS = 400;
+NUM_NEURONS = 800;
 INPUT = data;
 VTH = 15;
 T_REFRAC = 2;
