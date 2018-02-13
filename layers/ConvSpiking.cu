@@ -58,8 +58,8 @@ __global__ void g_ConvSpiking_backpropagation(
         int     preArea);
 
 /*
- * dim3 block = dim3(batch, outputAmount, inputAmount);
- * dim3 thread= min(kernelSize * kernelSize, 512);
+ * dim3 block = dim3(batch, outputAmount*inputAmount, kernelSize * kernelSize);
+ * dim3 thread= min(outputDim * outputDim, 512);
  */
 __global__ void g_ConvSpiking_wgrad(
         int*    _inputs_time,
@@ -73,6 +73,7 @@ __global__ void g_ConvSpiking_wgrad(
         int     endTime,
         int     kernelSize,
         int     padding,
+        int     inputAmount,
         int     inputArea,
         int     outputArea,
         int     curDeltaArea,
@@ -299,11 +300,12 @@ __global__ void g_ConvSpiking_calSquareSum(
 
 void ConvSpiking::getGrad()
 {
-    dim3 block = dim3(batch, outputAmount, inputAmount);
-    dim3 thread= min(kernelSize * kernelSize, 512);
+    dim3 block    = dim3(batch, outputAmount * inputAmount, kernelSize * kernelSize);
+    int n_threads = min(outputDim * outputDim, 512);
+    dim3 thread   = n_threads;
     cudaFuncSetCacheConfig(g_ConvSpiking_wgrad,cudaFuncCachePreferL1);
 
-    g_ConvSpiking_wgrad<<<block, thread>>>(
+    g_ConvSpiking_wgrad<<<block, thread, sizeof(float)*n_threads>>>(
         inputs_time->getDev(),
         outputs_time->getDev(),
         preFireCount->getDev(),
@@ -315,6 +317,7 @@ void ConvSpiking::getGrad()
         endTime,
         kernelSize,
         padding,
+        inputAmount,
         inputs->getArea(),
         outputs->getArea(),
         curDelta->getArea(),
@@ -419,7 +422,7 @@ ConvSpiking::ConvSpiking(std::string name)
 
     outputs  = new cuMatrix<bool>(batch, endTime * outputDim * outputDim, outputAmount);
     outputs_time = new cuMatrix<int>(batch, outputDim * outputDim * endTime, outputAmount);
-    inputs_resp = new cuMatrix<float>(batch, outputDim * outputDim * endTime, outputAmount);
+    inputs_resp = new cuMatrix<float>(batch, endTime * outputDim * outputDim, outputAmount);
 
 	curDelta = new cuMatrix<float>(batch, outputDim * outputDim, outputAmount);
     fireCount= new cuMatrix<int>(batch, outputDim * outputDim, outputAmount);
@@ -722,7 +725,7 @@ __global__ void g_ConvSpiking_fast_input_response(
         {
             int x = o_idx / outputDim;
             int y = o_idx % outputDim;
-            curResp[t + o_idx * endTime] = d_ConvSpiking_accumulate_spikes(inputDim, inputArea, inputAmount, kernelSize, inputs, x, y, padding, ok, batchId, ws, t, endTime);
+            curResp[o_idx + t * outputSize2] = d_ConvSpiking_accumulate_spikes(inputDim, inputArea, inputAmount, kernelSize, inputs, x, y, padding, ok, batchId, ws, t, endTime);
         }
     }
 }
@@ -773,7 +776,7 @@ __global__ void g_ConvSpiking_feedforward(
                     continue;
                 }
                 // get the convoluted the spikes
-                response = curResponse[(t-1) + o_idx*endTime];
+                response = curResponse[o_idx + (t - 1)*outputSize2];
                 ep += response;
                 v += ep/TAU_S;
 
@@ -850,8 +853,8 @@ __global__ void g_ConvSpiking_backpropagation(
 
 
 /*
- * dim3 block = dim3(batch, outputAmount, inputAmount);
- * dim3 thread= min(kernelSize * kernelSize, 512);
+ * dim3 block = dim3(batch, outputAmount*inputAmount, kernelSize * kernelSize);
+ * dim3 thread= min(outputDim * outputDim, 512);
  */
 __global__ void g_ConvSpiking_wgrad(
         int*    _inputs_time,
@@ -865,6 +868,7 @@ __global__ void g_ConvSpiking_wgrad(
         int     endTime,
         int     kernelSize,
         int     padding,
+        int     inputAmount,
         int     inputArea,
         int     outputArea,
         int     curDeltaArea,
@@ -873,8 +877,14 @@ __global__ void g_ConvSpiking_wgrad(
         float   TAU_M,
         float   TAU_S)
 {
-    int ok = blockIdx.y;
-    int ik  = blockIdx.z;
+    extern __shared__ float _sum[];
+    int tid = threadIdx.x;
+    _sum[tid] = 0;
+    __syncthreads();
+
+    int ok = blockIdx.y / inputAmount;
+    int ik  = blockIdx.y % inputAmount;
+    int k_id = blockIdx.z;
     int batchId  = blockIdx.x;
 
     int inputSize2    = inputDim * inputDim;
@@ -890,30 +900,38 @@ __global__ void g_ConvSpiking_wgrad(
     int* output_fireCount = batchFireCount + ok * outputArea / endTime + batchId * outputSize2;
     float* curDelta = _curDelta + ok * curDeltaArea + batchId * curDeltaSize2;
 
-    for(int tidx = 0; tidx < kernelSize2; tidx += blockDim.x)
+    for(int tidx = 0; tidx < outputSize2; tidx += blockDim.x)
     {
-        int idx = tidx + threadIdx.x;
-        if(idx < kernelSize2)
+        int o_idx = tidx + threadIdx.x;
+        if(o_idx < outputSize2)
         {
-            int i = idx / kernelSize;
-            int j = idx % kernelSize;
-            float val = 0.0;
-            for(int x = 0; x < curDeltaDim; x++){
-                int cx = i + x - padding;
-                for(int y = 0; y < curDeltaDim; y++)
-                {
-                    int cy = j + y - padding;
-                    if(cx >= 0 &&  cy >= 0 && cx < inputDim && cy < inputDim){
-                        int o_idx = x * curDeltaDim + y;
-                        int i_idx = cx * inputDim + cy;
-                        float e = d_Spiking_accumulate_effect(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], o_idx, i_idx, outputSize2, inputSize2, endTime, T_REFRAC, TAU_M, TAU_S);
-                        val += e * curDelta[x * curDeltaDim + y];
-                    }
-                }
+            int i = k_id / kernelSize;
+            int j = k_id % kernelSize;
+           
+            int x = o_idx / curDeltaDim;
+            int y = o_idx % curDeltaDim;
+            
+            int cx = i + x - padding;
+            int cy = j + y - padding;
+            if(cx >= 0 &&  cy >= 0 && cx < inputDim && cy < inputDim){
+                int i_idx = cx * inputDim + cy;
+                float e = d_Spiking_accumulate_effect(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], o_idx, i_idx, outputSize2, inputSize2, endTime, T_REFRAC, TAU_M, TAU_S);
+                _sum[tid] += e * curDelta[x * curDeltaDim + y]; 
             }
-            wgrad[idx] = val;
         }
     }
+    int len = blockDim.x;
+    while(len != 1)
+    {
+        __syncthreads();
+        int skip = (len + 1) >> 1;
+        if(tid < skip && (tid + skip) < len){
+            _sum[tid] += _sum[tid + skip];
+        }
+        len = skip;
+    }
+    if(tid == 0)
+        wgrad[k_id] = _sum[0];
 }
 
 /*
