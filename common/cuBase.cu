@@ -33,6 +33,21 @@ __device__ float d_dnonLinearity(float val,int NONLIN){
 	}
 }
 
+// use the binary search to find num(time) that is >= target
+__device__ int d_binary_search(int target, int * array, int size)
+{
+    int l = 0, r = size - 1;
+    while(l < r)
+    {
+        int m = l + (r - l)/2;
+        if(array[m] >= target)
+            r = m;
+        else 
+            l = m + 1;
+    }
+    return l;
+}
+
 /* given each input and output spike train of spike times, 
  * compute the accumulative synaptic effect
  * input: input spikes: endTime * inputDim
@@ -60,7 +75,9 @@ __device__ float d_Spiking_accumulate_effect(
         
         int ub = t_post;
         int lb = max(1, int(t_post - 4*TAU_M));
-        for(int j = 0; j < n_ispikes; ++j){
+        int u = ub == 1 ? 0 : d_binary_search(ub, input_time + i_idx * endTime, n_ispikes);
+        int l = lb == 1 ? 0 : d_binary_search(lb, input_time + i_idx * endTime, n_ispikes);
+        for(int j = l; j <= u; ++j){
             int t_pre = input_time[i_idx * endTime + j];
             if(t_pre < lb || t_pre >= ub)    continue;
 
