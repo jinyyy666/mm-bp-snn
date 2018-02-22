@@ -272,8 +272,8 @@ void checkMatrixIsSame(cuMatrix<float>*x, cuMatrix<float>*y, int channel)
             for(int k = 0; k < x->channels; k++){
                 float diff = x->get(i, j, k) - y->get(i, j, k);
                 if(fabs(diff) > 0.0001){
-                    printf("\n for %d_th weight matrix (or filter)", channel);
-                    printf("\n%d %d %d %f %f %f\n", i, j, k, x->get(i,j, k), y->get(i,j,k), diff);
+                    printf("\n for %d_th output weight matrix (or filter)", channel);
+                    printf("\nROW: %d COL: %d IN_CH: %d %f %f %f\n", i, j, k, x->get(i,j, k), y->get(i,j,k), diff);
                 }
                 assert(fabs(diff) < 0.0001);
             }
