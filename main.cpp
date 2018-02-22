@@ -536,7 +536,7 @@ void runSpikingMnist(){
 	std::vector<float> nMomentum;
 	std::vector<int> epoCount;
 #if defined(VERIFY)
-	nlrate.push_back(0.00001f);   nMomentum.push_back(0.00f);  epoCount.push_back(1);
+	nlrate.push_back(0.001f);   nMomentum.push_back(0.00f);  epoCount.push_back(1);
 #elif defined(VERIFY_SPIKING_CNN)
 	nlrate.push_back(0.001f);   nMomentum.push_back(0.00f);  epoCount.push_back(1);
 #else
