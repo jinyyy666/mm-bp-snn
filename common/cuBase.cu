@@ -645,6 +645,25 @@ __global__ void g_response_2_spiketime(bool* outputs, int* outputs_time, int out
 }
 
 /*
+* function: divide the curDelta(batch, outputSize, outputAmount) by vth
+* blocks  : dim3(batch, outputAmount)
+* threads : dim3(min(1024, outputSize))
+*/
+__global__ void g_divide_by_threshold(float * _delta, int area, int outputSize, float threshold)
+{
+    int batchId = blockIdx.x;
+    int ok = blockIdx.y;
+    float * delta = _delta + ok * area + batchId * outputSize;
+    for (int tidx = 0; tidx < outputSize; tidx += blockDim.x) {
+        int o_idx = tidx + threadIdx.x;
+        if (o_idx < outputSize) {
+            delta[o_idx] /= threshold;
+        }
+    }
+}
+
+
+/*
 * blocks : cuSoftMaxP->rows
 * threads: cuSoftMaxP->cols
 * shared : sizeof(float) * cuSoftMaxP->cols * 2

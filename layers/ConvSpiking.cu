@@ -3,6 +3,12 @@
 #include "../common/Config.h"
 #include "../common/util.h"
 
+//#define DEBUG
+#define ROW 4
+#define COL 2
+#define IN_CH 0
+#define OUT_CH 4
+
 /*
  * blocks  : dim3(batch, div, endTime);
  * threads :  dim3(min(outputDim * outputDim, 1024), remain));
@@ -171,6 +177,10 @@ void ConvSpiking::feedforward()
 
 void ConvSpiking::backpropagation()
 {	
+    g_divide_by_threshold<<<dim3(batch, outputAmount), dim3(min(1024, outputDim*outputDim))>>>(curDelta->getDev(), curDelta->getArea(), curDelta->cols, threshold);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("g_divide_by_threshold");
+    
 	if(Config::instance()->getLayerByName(m_name)->m_input == std::string("data"))
 		return;
 
@@ -180,7 +190,7 @@ void ConvSpiking::backpropagation()
     int div = (inputAmount + remain - 1) / remain; // inputAmount
     dim3 block = dim3(batch, div);
     dim3 thread= dim3(min(inputDim2, 1024), remain);
-
+   
     g_ConvSpiking_backpropagation<<<block, thread>>>(
         curDelta->getDev(),
         w.m_devPoint,
@@ -251,6 +261,12 @@ __global__ void g_ConvSpiking_wgradAdd(
 	{
         float sq_sum = w_sq_sum[ok];
 		Wgrad[ok][kid + c * wgradArea] = _sum[0] / batch + lambda*beta*(w[ok][kid + c * wArea]/wlimit)*__expf(beta*(sq_sum - 1));
+
+#ifdef DEBUG        
+        //        i              j    ik        ok
+        if(kid == ROW*kernelSize + COL && c == IN_CH && ok == OUT_CH)
+            printf("Wgrad: %f\n", Wgrad[ok][kid + c * wgradArea]);
+#endif
 	}
 }
 
@@ -916,7 +932,11 @@ __global__ void g_ConvSpiking_wgrad(
             if(cx >= 0 &&  cy >= 0 && cx < inputDim && cy < inputDim){
                 int i_idx = cx * inputDim + cy;
                 float e = d_Spiking_accumulate_effect(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], o_idx, i_idx, outputSize2, inputSize2, endTime, T_REFRAC, TAU_M, TAU_S);
-                _sum[tid] += e * curDelta[x * curDeltaDim + y]; 
+                _sum[tid] += e * curDelta[x * curDeltaDim + y];
+#ifdef DEBUG
+                if(i == ROW && j == COL && ik == IN_CH && ok == OUT_CH)
+                    printf("Collect x= %d; y = %d; Acc effect: %f\tdelta= %f\n", x,y,e,curDelta[x*curDeltaDim + y]);
+#endif
             }
         }
     }

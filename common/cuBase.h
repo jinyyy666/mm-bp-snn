@@ -89,6 +89,8 @@ threads : <<<dim3(batch), dim3(min(outputDim, 1024))>>>
 */
 __global__ void g_response_2_spiketime(bool* outputs, int* outputs_time, int outputArea, int ouputDim, int endTime);
 
+__global__ void g_divide_by_threshold(float * _delta, int area, int outputSize, float threshold);
+
 /*
 function: normalize the fire counts by the max count for SNN
 threads : <<<dim3(batch), dim3(min(1024, inputDim))>>>

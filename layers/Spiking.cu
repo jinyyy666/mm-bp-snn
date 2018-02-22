@@ -8,6 +8,8 @@
 #include <math.h>
 
 //#define DEBUG
+#define I_IDX 0
+#define O_IDX 0
 
 /*
  * Device func for accumulate the spike response
@@ -419,7 +421,14 @@ void Spiking::backpropagation()
         TAU_S);
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("g_Spiking_synaptic_effect");
-    
+   
+    // divide the curDelta by vth
+    block = dim3(batch, 1);
+    thread = dim3(min(1024, outputSize));
+    g_divide_by_threshold<<<block, thread>>>(curDelta->getDev(), curDelta->getArea(), curDelta->cols, threshold);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("g_divide_by_threshold");
+   
     // compute preDelta: curDelta: batch * outputSize; w: outputSize * inputSize
     if(preDelta == NULL){
         ConfigSpiking* config = (ConfigSpiking*)Config::instance()->getLayerByName(m_name);
@@ -1833,11 +1842,11 @@ __global__ void g_Spiking_debug_spiketime(
         int o_idx = i + threadIdx.x;
         if(o_idx < outputSize)
         {
-            if(i_idx == 7 && o_idx == 5){
-                printf("%d fires: ", i_idx);
+            if(i_idx == I_IDX && o_idx == O_IDX){
+                printf("Input %d fires: ", i_idx);
                 for(int i = 0; i < input_fireCount[i_idx]; i++)    printf("%d\t", input_time[i_idx * endTime + i]);
                 printf("\n");
-                printf("%d fires: ", o_idx);
+                printf("Output %d fires: ", o_idx);
                 for(int j = 0; j < output_fireCount[o_idx]; j++)    printf("%d\t", output_time[o_idx * endTime + j]);
                 printf("\n");
             }
