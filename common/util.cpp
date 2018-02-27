@@ -16,6 +16,8 @@
 using namespace cv;
 using namespace std;
 
+std::default_random_engine generator;
+
 int getSharedMemory(vector<unsigned int>& vec) {
     int dev_num = 0;
     if(!vec.empty())vec.clear();
@@ -209,6 +211,18 @@ void createGaussian(float* gaussian, float dElasticSigma1, float dElasticSigma2,
     //printf("\n\n");
 }
 
+// gaussian distribution with mean = 0, var = var
+void createGaussian(float* gaussian, int rows, int cols, int channels, float variance)
+{
+    std::normal_distribution<float> distribution(0, variance);
+    for(int row = 0; row < rows; ++row)
+    {
+        for(int col = 0; col < cols; ++col)
+        {
+            gaussian[row * cols + col] = distribution(generator);
+        }
+    }
+}
 
 void dropDelta(cuMatrix<float>* M, float cuDropProb)
 {

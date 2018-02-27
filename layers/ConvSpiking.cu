@@ -560,11 +560,8 @@ void ConvSpiking::initRandom()
             float epsilon = initW;
             for(int c = 0; c < w[i]->channels; c++)
             {
-                float r1 = 0.5f + 4.0f * (rand()) / RAND_MAX;
-                float r2 = 0.5f + 4.0f * (rand()) / RAND_MAX;
-                createGaussian(w[i]->getHost() + c * w[i]->getArea(), r1,r2,
-                        kernelSize, kernelSize, w[i]->channels,
-                        epsilon);
+                createGaussian(w[i]->getHost() + c * w[i]->getArea(),
+                        kernelSize, kernelSize, w[i]->channels, epsilon);
             }
             w[i]->toGpu();
         }

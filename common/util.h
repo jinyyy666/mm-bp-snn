@@ -34,6 +34,7 @@ void LOG(const char* str, const char* file);
 int  getCV_64();
 void createGaussian(float* gaussian, float dElasticSigma1, float dElasticSigma2,
 	int rows, int cols, int channels, float epsilon);
+void createGaussian(float* gaussian, int rows, int cols, int channels, float epsilon);
 
 #define  cuAssert( X ) if ( !(X) ) {printf("tid %d: FILE=%s, LINE=%d\n", threadIdx.x, __FILE__, __LINE__); return; }
 #define  Assert( X )   if ( !(X) ) {printf("FILE=%s, LINE=%d\n", __FILE__, __LINE__); int* p = (int*)-1; p[0] = 1; return; }

@@ -914,11 +914,8 @@ void Spiking::initRandom()
         float epsilon = initW;
         for(int c = 0; c < w->channels; c++)
         {
-            float r1 = 0.5f + 4.0f * (rand()) / RAND_MAX;
-            float r2 = 0.5f + 4.0f * (rand()) / RAND_MAX;
-            createGaussian(w->getHost() + c * w->getArea(), r1,r2,
-                    outputSize, inputSize, w->channels,
-                    epsilon);
+            createGaussian(w->getHost() + c * w->getArea(),
+                    outputSize, inputSize, w->channels, epsilon);
         }
         w->toGpu();
     }
