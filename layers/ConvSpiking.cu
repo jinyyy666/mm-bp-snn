@@ -493,11 +493,8 @@ ConvSpiking::ConvSpiking(std::string name)
 
 void ConvSpiking::save(FILE* file)
 {
-	for(int a = 0; a < (int)w.size(); a++){
-		
+	for(int a = 0; a < (int)w.size(); a++){	
 		w[a]->toCpu();
-		b[a]->toCpu();
-
 		for(int c = 0; c < w[a]->channels; c++){
 			for(int i = 0; i < w[a]->rows; i++){
 				for(int j = 0; j < w[a]->cols; j++){
@@ -505,7 +502,9 @@ void ConvSpiking::save(FILE* file)
 				}
 			}
 		}
-
+    }
+	for(int a = 0; a < (int)w.size(); a++){
+		b[a]->toCpu();
 		for(int c = 0; c < b[a]->channels; c++){
 			for(int i = 0; i < b[a]->rows; i++){
 				for(int j = 0; j < b[a]->cols; j++){
@@ -594,7 +593,10 @@ void ConvSpiking::initFromCheckpoint(FILE* file)
                 }
             }
         }
-
+        w[a]->toGpu();
+    }
+    
+    for(size_t a = 0; a < b.size(); a++){
         for(int c = 0; c < b[a]->channels; c++){
             for(int i = 0; i < b[a]->rows; i++){
                 for(int j = 0; j < b[a]->cols; j++){
@@ -606,7 +608,6 @@ void ConvSpiking::initFromCheckpoint(FILE* file)
                 }
             }
         }
-        w[a]->toGpu();
         b[a]->toGpu();
     }
 }
