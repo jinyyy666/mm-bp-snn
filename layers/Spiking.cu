@@ -693,8 +693,9 @@ Spiking::Spiking(std::string name)
     assert(outputSize > 0 && inputSize > 0);
 
     w        = new cuMatrix<float>(outputSize, inputSize, 1);
-    b        = new cuMatrix<float>(1, 1, 1);
+    b        = new cuMatrix<float>(outputSize, 1, 1);
     wgrad    = new cuMatrix<float>(outputSize, inputSize, 1);
+    bgrad    = new cuMatrix<float>(outputSize, 1, 1);
     wgradTmp = new cuMatrix<float>(batch, outputSize * inputSize, 1);
     if(config->hasLaterialWeight() == true){
         w_laterial = new cuMatrix<float>(outputSize, outputSize, 1);
