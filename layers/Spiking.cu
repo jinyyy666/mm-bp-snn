@@ -598,43 +598,6 @@ void Spiking::getGrad()
 	getLastCudaError("g_Spiking_gradAdd");
     
     // add the bias derivation here:
-    ConfigSpiking * config = (ConfigSpiking*) Config::instance()->getLayerByName(m_name); 
-    if(config->hasBias()){
-        thread = dim3(min(1024, outputSize));
-        block  = dim3(batch);
- 
-        int dummyFreq = config->getBiasFreq();
-        g_Spiking_bgrad_spiketime<<<block, thread>>>(
-            outputs_time->getDev(),
-            fireCount->getDev(),
-            curDelta->getDev(),
-            bgradTmp->getDev(),
-            outputSize,
-            endTime,
-            dummyFreq,
-            T_REFRAC,
-            TAU_M,
-            TAU_S);
-
-    	checkCudaErrors(cudaStreamSynchronize(0));
-	    getLastCudaError("g_Spiking_bgrad_spiketime");
-        
-        block  = dim3(outputSize);
-        thread = dim3(batch);
- 
-        g_Spiking_gradAdd<<<block, thread, sizeof(float) * batch>>>(
-            bgradTmp->getDev(),
-            bgrad->getDev(),
-            b->getDev(),
-            weightSqSum->getDev(),
-            batch,
-            0.0f,
-            0.0f,
-            weightLimit,
-            inputSize,
-            b->getArea());
-    }
-
 }	
 
 
@@ -664,19 +627,7 @@ void Spiking::updateWeight()
             Config::instance()->getMomentum(),
             Config::instance()->getLrate());
     }
-    ConfigSpiking * config = (ConfigSpiking*) Config::instance()->getLayerByName(m_name); 
-    if(config->hasBias()){
-        block  = min((w->getLen() + 255)/ 256, 5120);
-        thread = 256;
-        g_sgd_vecAdd<<<block, thread, 0, Layers::instance()->get_stream()>>>(
-            momentum_b->getDev(),
-            bgrad->getDev(),
-            b->getDev(),
-            b->getLen(),
-            Config::instance()->getMomentum(),
-            Config::instance()->getLrate());
-    }
-
+    // handle the bias here
 }
 
 
@@ -742,11 +693,9 @@ Spiking::Spiking(std::string name)
     assert(outputSize > 0 && inputSize > 0);
 
     w        = new cuMatrix<float>(outputSize, inputSize, 1);
-    b        = new cuMatrix<float>(outputSize, 1, 1);
+    b        = new cuMatrix<float>(1, 1, 1);
     wgrad    = new cuMatrix<float>(outputSize, inputSize, 1);
-    bgrad    = new cuMatrix<float>(outputSize, 1, 1);
     wgradTmp = new cuMatrix<float>(batch, outputSize * inputSize, 1);
-    bgradTmp = new cuMatrix<float>(batch, outputSize, 1);
     if(config->hasLaterialWeight() == true){
         w_laterial = new cuMatrix<float>(outputSize, outputSize, 1);
     }
