@@ -51,17 +51,24 @@ __global__ void g_ConvSpiking_feedforward(
  * dim3 thread= dim3(min(inputDim * inputDim, 1024), 1);
  */
 __global__ void g_ConvSpiking_backpropagation(
+        int*    _inputs_time,
+        int*    _outputs_time,
+        int*    batchPreFireCount,
+        int*    batchFireCount,
         float* _curDelta,
         float** ws,
         float* _preDelta,
         int     curDim,
         int     preDim,
-        int     preAmount,
+        int     endTime,
         int     curAmount,
         int     kernelSize,
         int     padding,
-        int     curArea,
-        int     preArea);
+        int     outputArea,
+        int     inputArea,
+        int     T_REFRAC,
+        float   TAU_M,
+        float   TAU_S);
 
 /*
  * dim3 block = dim3(batch, outputAmount*inputAmount, kernelSize * kernelSize);
@@ -184,25 +191,29 @@ void ConvSpiking::backpropagation()
 	if(Config::instance()->getLayerByName(m_name)->m_input == std::string("data"))
 		return;
 
-    int inputDim2 = inputDim * inputDim;
-    int remain = min(1024 / inputDim2, inputAmount); // 1
-
-    int div = (inputAmount + remain - 1) / remain; // inputAmount
-    dim3 block = dim3(batch, div);
-    dim3 thread= dim3(min(inputDim2, 1024), remain);
+    dim3 block  = dim3(batch, inputAmount, inputDim * inputDim);
+    int threadx = min(kernelSize * kernelSize * outputAmount, 1024);
+    dim3 thread = dim3(threadx);
    
-    g_ConvSpiking_backpropagation<<<block, thread>>>(
+    g_ConvSpiking_backpropagation<<<block, thread, sizeof(float)*threadx>>>(
+        inputs_time->getDev(),
+        outputs_time->getDev(),
+        preFireCount->getDev(),
+        fireCount->getDev(),
         curDelta->getDev(),
         w.m_devPoint,
         preDelta->getDev(),
         outputDim,
         inputDim,
-        inputAmount,
+        endTime,
         outputAmount,
         kernelSize,
         padding,
-        curDelta->getArea(),
-        preDelta->getArea());
+        outputs->getArea(),
+        inputs->getArea(),
+        T_REFRAC,
+        TAU_M,
+        TAU_S);
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("ConvSpiking::g_ConvSpiking_backpropagation");
 }
@@ -812,57 +823,90 @@ __global__ void g_ConvSpiking_feedforward(
 
 
 /*
- * dim3 block = dim3(batch, inputAmount);
- * dim3 thread= dim3(min(inputDim * inputDim, 1024), 1);
+ * dim3 block = dim3(batch, inputAmount, inputDim * inputDim);
+ * dim3 thread= dim3(min(kernelSize * kernelSize * outputAmount, 1024));
  */
 __global__ void g_ConvSpiking_backpropagation(
+        int*    _inputs_time,
+        int*    _outputs_time,
+        int*    batchPreFireCount,
+        int*    batchFireCount,
         float* _curDelta,
         float** ws,
         float* _preDelta,
         int     curDim,
         int     preDim,
-        int     preAmount,
+        int     endTime,
         int     curAmount,
         int     kernelSize,
         int     padding,
-        int     curArea,
-        int     preArea)
+        int     outputArea,
+        int     inputArea,
+        int     T_REFRAC,
+        float   TAU_M,
+        float   TAU_S)
 {
-    int batchId = blockIdx.x;
-    int ik      = blockIdx.y * blockDim.y + threadIdx.y;
+    extern  __shared__ float _sum[];
+    int tid = threadIdx.x;
+    _sum[tid] = 0;
+    __syncthreads();
 
-    if(ik >= preAmount)        return;
+    int batchId = blockIdx.x;
+    int ik      = blockIdx.y;
+    int i_idx   = blockIdx.z;
 
     int curSize2    = curDim     * curDim;
     int preSize2    = preDim     * preDim;
     int kernelSize2 = kernelSize * kernelSize;
+    int curArea = outputArea / endTime;
+    int preArea = inputArea / endTime;
 
+    int* input_time = _inputs_time + inputArea * ik + batchId * preSize2 * endTime;
+    int* input_fireCount = batchPreFireCount + ik * inputArea / endTime + batchId * preSize2; 
     float *preDelta = _preDelta + ik * preArea + batchId * preSize2;
-    for (int tidx = 0; tidx < preSize2; tidx += blockDim.x) {
+
+    int i = i_idx / preDim;
+    int j = i_idx % preDim;
+    int totalBackAmount = curAmount * kernelSize2;
+    for (int tidx = 0; tidx < totalBackAmount; tidx += blockDim.x) {
         int idx = tidx + threadIdx.x;
-        if (idx < preSize2) {
-            int i = idx / preDim;
-            int j = idx % preDim;
-            float val = 0.0;
-            int ok = 0;
-            int c = ik;
-            while(ok < curAmount){
-                float *curDelta = _curDelta + ok * curArea + batchId * curSize2;
-                float *w = ws[ok] + c * kernelSize2;
-                for (int x = 0; x < kernelSize; x++) {
-                    int cx = i - x + padding;
-                    for (int y = 0; y < kernelSize; y++) {
-                        int cy = j - y + padding;
-                        if(cx >= 0 && cx < curDim && cy >= 0 && cy < curDim){
-                            val += curDelta[cx * curDim + cy] * w[x * kernelSize + y];
-                        }
-                    }
-                }
-                ok += 1;
+        if (idx < totalBackAmount) {
+            int ok = idx / kernelSize2;
+            float *curDelta = _curDelta + ok * curArea + batchId * curSize2;
+            float *w = ws[ok] + ik * kernelSize2;
+            int* output_time = _outputs_time + outputArea * ok + batchId * curSize2 * endTime;
+            int* output_fireCount = batchFireCount + ok * outputArea / endTime + batchId * curSize2;
+
+            int x   = (idx % kernelSize2) / kernelSize;
+            int y   = (idx % kernelSize2) % kernelSize;
+            int cx  = i - x + padding;
+            int cy  = j - y + padding;
+
+            if(cx >= 0 && cx < curDim && cy >= 0 && cy < curDim) {
+                int o_idx = cx * curDim + cy;
+                float e = d_Spiking_accumulate_effect(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], o_idx, i_idx, curSize2, preSize2, endTime, T_REFRAC, TAU_M, TAU_S);
+                int o_cnt = output_fireCount[o_idx];
+                int i_cnt = input_fireCount[i_idx];
+                float ratio = i_cnt == 0 || o_cnt == 0 ? 1 : e / float(i_cnt);
+                _sum[threadIdx.x] += curDelta[cx * curDim + cy] * w[x * kernelSize + y] * ratio;
             }
-            preDelta[idx] = val;
         }
     }
+
+    __syncthreads();
+    int len = blockDim.x;
+    while(len != 1)
+    {
+        __syncthreads();
+        int skip = (len + 1) >> 1;
+        if(tid < skip && (tid + skip < len))
+        {
+            _sum[tid] += _sum[tid + skip];
+        }
+        len = skip;
+    }
+    if(tid == 0)
+        preDelta[i_idx] = _sum[0];
 }
 
 

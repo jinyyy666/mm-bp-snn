@@ -35,20 +35,49 @@ __global__ void g_PoolingSpiking_feedforward(
 
 /*
  * function: upper pooling with psize == pskip
- * blocks : dim3(min(256, (poolDeltalen + threadx) / threadx)) 
- * threads: dim3(threadx);
+ * blocks : dim3(batch, outputAmount, outputDim * outputDim)
+ * threads: dim3(psize * psize);
  */
-__global__ void g_PoolingSpiking_backpropagation_no_atomic(float* _pool, float* _conv,
-	int poolDim, int convDim, int poolingSkip, int poolingSize, int poolDeltalen);
-
+__global__ void g_PoolingSpiking_backpropagation_no_atomic(
+    int* _inputs_time,
+    int* _outputs_time,
+    int* batchPreFireCount,
+    int* batchFireCount,
+    float* _pool,
+    float* _conv,
+	int poolDim,
+    int convDim,
+    int endTime,
+    int convArea,
+    int poolArea,
+    int pSkip,
+    int pSize,
+    int T_REFRAC,
+    float TAU_M,
+    float TAU_S);
 
 /*
  * function: upper pooling with psize != pskip
- * blocks : dim3(min(256, (poolDeltalen + threadx) / threadx)) 
- * threads: dim3(threadx);
+ * blocks : dim3(batch, outputAmount, outputDim * outputDim)
+ * threads: dim3(psize * psize);
  */
-__global__ void g_PoolingSpiking_backpropagation(float* _pool, float* _conv,
-	int poolDim, int convDim, int poolingSkip, int poolingSize, int poolDeltalen);
+__global__ void g_PoolingSpiking_backpropagation(
+    int* _inputs_time,
+    int* _outputs_time,
+    int* batchPreFireCount,
+    int* batchFireCount,
+    float* _pool,
+    float* _conv,
+	int poolDim,
+    int convDim,
+    int endTime,
+    int convArea,
+    int poolArea,
+    int pSkip,
+    int pSize,
+    int T_REFRAC,
+    float TAU_M,
+    float TAU_S);
 
 
 void PoolingSpiking::loadRef()
@@ -148,22 +177,48 @@ void PoolingSpiking::feedforward()
 
 void PoolingSpiking::backpropagation()
 {
-    int curDeltalen = curDelta->getLen();
-    int threadx = outputDim * outputDim;
-    threadx = 1024 / threadx * threadx;
-    dim3 block = dim3(std::min(256, (curDeltalen + threadx) / threadx));
-    dim3 thread= dim3(threadx);
+    dim3 block = dim3(batch, outputAmount, outputDim * outputDim);
+    dim3 thread= dim3(psize * psize);
     if(psize == pskip){
         /*no need to clear preDelta*/
         g_PoolingSpiking_backpropagation_no_atomic<<<block, thread>>>(
-            curDelta->getDev(), preDelta->getDev(), 
-            outputDim, inputDim, pskip, psize, curDeltalen);
+            inputs_time->getDev(),
+            outputs_time->getDev(),
+            preFireCount->getDev(),
+            fireCount->getDev(),
+            curDelta->getDev(),
+            preDelta->getDev(),
+            outputDim,
+            inputDim,
+            endTime,
+            inputs->getArea(),
+            outputs->getArea(),
+            pskip,
+            psize,
+            T_REFRAC,
+            TAU_M,
+            TAU_S);
         checkCudaErrors(cudaStreamSynchronize(0));
         getLastCudaError("PoolingSpiking::g_PoolingSpiking_backpropagation_no_atomic");
     }else{
         preDelta->gpuClear();
-        g_PoolingSpiking_backpropagation<<<block, thread>>>(curDelta->getDev(), preDelta->getDev(), 
-            outputDim, inputDim, pskip, psize, curDeltalen);
+        g_PoolingSpiking_backpropagation<<<block, thread>>>(
+            inputs_time->getDev(),
+            outputs_time->getDev(),
+            preFireCount->getDev(),
+            fireCount->getDev(),
+            curDelta->getDev(),
+            preDelta->getDev(),
+            outputDim,
+            inputDim,
+            endTime,
+            inputs->getArea(),
+            outputs->getArea(),
+            pskip,
+            psize,
+            T_REFRAC,
+            TAU_M,
+            TAU_S);
         checkCudaErrors(cudaStreamSynchronize(0));
         getLastCudaError("PoolingSpiking::g_PoolingSpiking_backpropagation");
     }
@@ -182,7 +237,9 @@ PoolingSpiking::PoolingSpiking(std::string name)
 	pskip = config->m_skip;
 
 	inputs = preLayer->getSpikingOutputs();
+    inputs_time = preLayer->getSpikingTimeOutputs();
     preDelta = preLayer->getCurDelta();
+    preFireCount = preLayer->getFireCount();
 
 	inputDim = preLayer->outputDim;
 	outputDim = (inputDim + pskip - 1) / pskip;
@@ -336,87 +393,121 @@ __global__ void g_PoolingSpiking_feedforward(
 
 /*
  * function: upper pooling with psize != pskip
- * blocks : dim3(min(256, (poolDeltalen + threadx) / threadx)) 
- * threads: dim3(threadx);
+ * blocks : dim3(batch, outputAmount, outputDim * outputDim) 
+ * threads: dim3(psize * psize);
  */
-__global__ void g_PoolingSpiking_backpropagation(float* _pool, float* _conv,
-	int poolDim, int convDim, int pSkip, int pSize, int poolDeltalen)
+__global__ void g_PoolingSpiking_backpropagation(
+    int* _inputs_time,
+    int* _outputs_time,
+    int* batchPreFireCount,
+    int* batchFireCount,
+    float* _pool,
+    float* _conv,
+	int poolDim,
+    int convDim,
+    int endTime,
+    int convArea,
+    int poolArea,
+    int pSkip,
+    int pSize,
+    int T_REFRAC,
+    float TAU_M,
+    float TAU_S)
 {
+    int batchId = blockIdx.x;
+    int ok = blockIdx.y;
+    int o_idx = blockIdx.z;
+    int ik = ok;
+
 	int poolSize2 = poolDim * poolDim;
 	int convSize2 = convDim * convDim;
-	for(int i = 0; i < poolDeltalen; i += gridDim.x * blockDim.x)
-	{
-		int id = i + blockDim.x * blockIdx.x + threadIdx.x;
-		if(id < poolDeltalen)
-		{
-			int convId = id / poolSize2;
-			int idx    = id % poolSize2;
+    int preDeltaArea = convArea / endTime;
+    int curDeltaArea = poolArea / endTime;
 
-			float* pool = _pool   + poolSize2 * convId;
-			float* conv = _conv   + convSize2 * convId;
+    int* input_time = _inputs_time + convArea * ik + batchId * convSize2 * endTime;
+    int* output_time = _outputs_time + poolArea * ok + batchId * poolSize2 * endTime;
+    int* input_fireCount = batchPreFireCount + ik * convArea / endTime + batchId * convSize2;
+    int* output_fireCount = batchFireCount + ok * poolArea / endTime + batchId * poolSize2;
+    float* conv = _conv + ok * preDeltaArea + batchId * convSize2;
+    float* pool = _pool + ok * curDeltaArea + batchId * poolSize2;
 
-			int x = idx / poolDim;
-			int y = idx % poolDim;
+    int x = o_idx / poolDim;
+    int y = o_idx % poolDim;
 
-			int curX = x * pSkip;
-			int curY = y * pSkip;
+    int curX = x * pSkip;
+    int curY = y * pSkip;
 
-			int lenx = min(convDim, curX + pSize);
-			int leny = min(convDim, curY + pSize);
+    int i = curX + threadIdx.x / pSize;
+    int j = curY + threadIdx.x % pSize;
 
-			float val = pool[idx] / (pSize * pSize);
-			for(int i = curX; i < lenx; i++)
-			{
-				for(int j = curY; j < leny; j++)
-				{
-					cuAssert(i < convDim && j < convDim);
-					atomicAdd(conv + i * convDim + j, val);
-				}
-			}
-		}
+    float val = pool[o_idx] / (pSize * pSize);
+    if(i < convDim && j < convDim){
+        int i_idx = i * convDim + j;
+        float e = d_Spiking_accumulate_effect(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], o_idx, i_idx, poolSize2, convSize2, endTime, T_REFRAC, TAU_M, TAU_S);
+        int o_cnt = output_fireCount[o_idx];
+        int i_cnt = input_fireCount[i_idx];
+        float ratio = i_cnt == 0 || o_cnt == 0 ? 1 : e / float(i_cnt);
+		atomicAdd(conv + i * convDim + j, val * ratio);
 	}
 }
 
 
 /*
  * function: upper pooling with psize == pskip
- * blocks : dim3(min(256, (poolDeltalen + threadx) / threadx)) 
- * threads: dim3(threadx);
+ * blocks : dim3(batch, outputAmount, outputDim * outputDim) 
+ * threads: dim3(psize * psize);
  */
-__global__ void g_PoolingSpiking_backpropagation_no_atomic(float* _pool, float* _conv,
-	int poolDim, int convDim, int pSkip, int pSize, int poolDeltalen)
+__global__ void g_PoolingSpiking_backpropagation_no_atomic(
+    int* _inputs_time,
+    int* _outputs_time,
+    int* batchPreFireCount,
+    int* batchFireCount,
+    float* _pool,
+    float* _conv,
+	int poolDim,
+    int convDim,
+    int endTime,
+    int convArea,
+    int poolArea,
+    int pSkip,
+    int pSize,
+    int T_REFRAC,
+    float TAU_M,
+    float TAU_S)
 {
+    int batchId = blockIdx.x;
+    int ok = blockIdx.y;
+    int o_idx = blockIdx.z;
+    int ik = ok;
+
 	int poolSize2 = poolDim * poolDim;
 	int convSize2 = convDim * convDim;
-	for(int i = 0; i < poolDeltalen; i += gridDim.x * blockDim.x)
-	{
-		int id = i + blockDim.x * blockIdx.x + threadIdx.x;
-		if(id < poolDeltalen)
-		{
-			int convId = id / poolSize2;
-			int idx    = id % poolSize2;
+    int preDeltaArea = convArea / endTime;
+    int curDeltaArea = poolArea / endTime;
 
-			float* pool = _pool   + poolSize2 * convId;
-			float* conv = _conv   + convSize2 * convId;
+    int* input_time = _inputs_time + convArea * ik + batchId * convSize2 * endTime;
+    int* output_time = _outputs_time + poolArea * ok + batchId * poolSize2 * endTime;
+    int* input_fireCount = batchPreFireCount + ik * convArea / endTime + batchId * convSize2;
+    int* output_fireCount = batchFireCount + ok * poolArea / endTime + batchId * poolSize2;
+    float* conv = _conv + ok * preDeltaArea + batchId * convSize2;
+    float* pool = _pool + ok * curDeltaArea + batchId * poolSize2;
 
-			int x = idx / poolDim;
-			int y = idx % poolDim;
+    int x = o_idx / poolDim;
+    int y = o_idx % poolDim;
 
-			int curX = x * pSkip;
-			int curY = y * pSkip;
+    int curX = x * pSkip;
+    int curY = y * pSkip;
 
-			int lenx = min(convDim, curX + pSize);
-			int leny = min(convDim, curY + pSize);
+    int i = curX + threadIdx.x / pSize;
+    int j = curY + threadIdx.x % pSize;
 
-			float val = pool[idx] / (pSize * pSize);
-			for(int i = curX; i < lenx; i++)
-			{
-				for(int j = curY; j < leny; j++)
-				{
-					assert(i < convDim && j < convDim);
-					conv[i * convDim + j] = val;
-				}
-			}
-		}
-	}
+    float val = pool[o_idx] / (pSize * pSize);
+    if(i < convDim && j < convDim){
+        int i_idx = i * convDim + j;
+        float e = d_Spiking_accumulate_effect(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], o_idx, i_idx, poolSize2, convSize2, endTime, T_REFRAC, TAU_M, TAU_S);
+        int o_cnt = output_fireCount[o_idx];
+        int i_cnt = input_fireCount[i_idx];
+        float ratio = i_cnt == 0 || o_cnt == 0 ? 1 : e / float(i_cnt);
+		conv[i * convDim + j] = val * ratio;
+    }
 }

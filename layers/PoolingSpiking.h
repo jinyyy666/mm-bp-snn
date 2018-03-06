@@ -84,6 +84,7 @@ private:
     cuMatrix<int>*    outputs_time;
 
     cuMatrix<int>*   fireCount;
+    cuMatrix<int>*   preFireCount;
 
 	int psize;
 	int pskip;
