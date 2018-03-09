@@ -7,6 +7,42 @@
 #include "../common/util.h"
 #include "../common/cuMatrixVector.h"
 
+/*
+ *	blocks : dim3(batch, div),
+ *	threads: dim3(min(outputSize, 1024), 1);
+ */
+__global__ void g_Spiking_feedforward(float* inputs_resp, float* w, float* ws_lat, float* b, 
+bool* outputs, int* fireCount, int inputSize, int outputSize, int endTime, float vth, int dummyFreq, 
+int T_REFRAC, float TAU_M, float TAU_S);
+
+/*
+ * dim3 block = dim3(batch);
+ * dim3 thread= dim3(outputSize);
+ */
+__global__ void g_boostWeight_output(float* outputDelta, float* sample_weights, int len);
+
+/*
+ * dim3 block = dim3(batch, outputSize);
+ * dim3 thread= min(1024, outputSize);
+ */
+__global__ void g_getLateralFactor_output(int* outputs_time, int* batchFireCount, float w0, int* y,
+float* batchLFactor, float vth, int outputSize, int endTime, int T_REFRAC, float TAU_M,float TAU_S);
+
+/*
+ * dim3 block = dim3(batch);
+ * dim3 thread= dim3(min(1024, outputSize));
+ */
+__global__ void g_modifySpikes(bool* outputs, int* y, int* fireCount, int target_level, int endTime, int outputSize);
+
+/*
+ * dim3 block = dim3(batch, inputSize);
+ * dim3 thread= min(1024, outputSize);
+ */
+__global__ void g_Spiking_synaptic_effect(int* inputs_time, int* outputs_time, int* batchPreFireCount,
+int* batchFireCount, float* w, float* batchAccEffect, float* effectRatio, int inputSize, 
+int outputSize, int endTime, int T_REFRAC, float TAU_M, float TAU_S);
+
+
 
 class Spiking: public SpikingLayerBase
 {
@@ -44,13 +80,13 @@ public:
 	}
 
 
-	void feedforward();
-	void backpropagation();
+	virtual void feedforward();
+	virtual void backpropagation();
     void verify(const std::string& phrase);
 	void getGrad();
 	void updateWeight();
 	void clearMomentum();
-	void calCost();
+	virtual void calCost();
     void loadRef();
 
 	void initRandom();
@@ -119,7 +155,7 @@ public:
 		LOG(logStr, "Result/log.txt");
     }
 
-private:
+protected:
 	cuMatrix<bool>*   inputs;
 	cuMatrix<float>*  preDelta;
 	cuMatrix<float>*  preDelta_format; //preDelta(batch, size, channel) --> (batch, size * channel)
@@ -159,7 +195,7 @@ private:
     float UNDESIRED_LEVEL;
     float DESIRED_LEVEL;
     float MARGIN;
-private:
+protected:
 	cuMatrix<float>* w;
 	cuMatrix<float>* wgrad;
 	cuMatrix<float>* wgradTmp;

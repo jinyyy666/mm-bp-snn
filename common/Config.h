@@ -700,21 +700,6 @@ public:
 };
 
 
-class ConfigSoftMaxSpiking : public ConfigBase
-{
-public:
-    ConfigSoftMaxSpiking(std::string name, std::string input, std::string type, int numClasses, float weightDecay, float initW)
-    {
-        m_name = name;
-        m_input = input;
-        m_type = type;
-        m_numClasses = numClasses;
-        m_weightDecay = weightDecay;
-        m_initW = initW;
-    }
-    int m_numClasses;
-    float m_weightDecay;  
-};
 class ConfigHorizontal
 {
 public:

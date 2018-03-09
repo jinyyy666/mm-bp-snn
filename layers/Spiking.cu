@@ -104,33 +104,6 @@ __global__ void g_getDelta_output(
     float* groundTruth,
     int    len,
     float  MARGIN);
-
-/*
- * dim3 block = dim3(batch);
- * dim3 thread= dim3(outputSize);
- */
-__global__ void g_boostWeight_output(
-    float* outputDelta,
-    float* sample_weights,
-    int len);
-
-
-/*
- * dim3 block = dim3(batch, outputSize);
- * dim3 thread= min(1024, outputSize);
- */
-__global__ void g_getLateralFactor_output(
-    int* outputs_time,
-    int* batchFireCount,
-    float w0,
-    int* y,
-    float* batchLFactor,
-    float vth,
-    int outputSize,
-    int endTime,
-    int T_REFRAC,
-    float TAU_M,
-    float TAU_S);
   
 /*
  * dim3 block = dim3(batch);
@@ -140,19 +113,6 @@ __global__ void g_getMaxCount(
     int* fireCount,
     int* maxCount,
     int cols); 
-
-/*
- * dim3 block = dim3(batch);
- * dim3 thread= dim3(min(1024, outputSize));
- */
-__global__ void g_modifySpikes(
-    bool* outputs,
-    int* y,
-    int* fireCount,
-    int target_level,
-    int endTime,
-    int outputSize);
-
 
 /*
  * dim3 block = dim3(batch, inputSize);
@@ -215,47 +175,6 @@ __global__ void g_Spiking_gradAdd(
     float limit,
     int inputSize,
 	int wArea);
-
-
-/*
- * dim3 block = dim3(batch, inputSize);
- * dim3 thread= min(1024, outputSize);
- */
-__global__ void g_Spiking_synaptic_effect(
-        int* inputs_time,
-        int* outputs_time,
-        int* batchPreFireCount,
-        int* batchFireCount,
-        float* w,
-        float* batchAccEffect,
-        float* effectRatio,
-        int inputSize,
-        int outputSize,
-        int endTime,
-        int T_REFRAC,
-        float TAU_M,
-        float TAU_S);
-
-
-/*
- *	blocks : dim3(batch, div),
- *	threads: dim3(min(outputSize, 1024), 1);
- */
-__global__ void g_Spiking_feedforward(
-    float* inputs_resp,
-	float* w,
-    float* ws_lat,
-    float* b,
-	bool*  outputs,
-    int*    fireCount,
-	int inputSize,
-	int outputSize,
-    int endTime,
-    float vth,
-    int dummyFreq,
-    int T_REFRAC,
-    float TAU_M,
-    float TAU_S);
 
 
 /*

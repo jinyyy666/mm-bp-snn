@@ -27,8 +27,8 @@
 
 //#define VERIFY
 //#define VERIFY_RESERVOIR
-//#define SOFTMAX_SPIKING
 //#define SPIKING_CNN
+//#define VERIFY_SOFTMAX_SPIKING_CNN
 #define VERIFY_SPIKING_CNN
 
 void runMnist();
@@ -394,8 +394,6 @@ void runNMnist(){
     config->initPath("Config/NMnistConfig_test_complete.txt");
 #elif defined(VERIFY_RESERVOIR)
     config->initPath("Config/NMnistConfig_test_reservoir.txt");
-#elif defined(SOFTMAX_SPIKING)
-    config->initPath("Config/NMnistConfig_softmax.txt");
 #else
     config->initPath("Config/NMnistConfig.txt");
 #endif
@@ -478,6 +476,8 @@ void runSpikingMnist(){
     config->initPath("Config/SpikingMnistConfig_test.txt");
 #elif     defined(VERIFY_SPIKING_CNN)
     config->initPath("Config/SpikingCNNMnistConfig_test.txt");
+#elif   defined(VERIFY_SOFTMAX_SPIKING_CNN)
+    config->initPath("Config/SpikingCNNMnistConfig_test_softmax.txt");
 #elif   defined(SPIKING_CNN)
     config->initPath("Config/SpikingCNNMnistConfig.txt");
 #else
@@ -489,7 +489,7 @@ void runSpikingMnist(){
     int end_time = config->getEndTime();
     int train_samples = config->getTrainSamples();
     int test_samples = config->getTestSamples();
-#if defined(VERIFY) || defined(VERIFY_SPIKING_CNN)
+#if defined(VERIFY) || defined(VERIFY_SPIKING_CNN) || defined(VERIFY_SOFTMAX_SPIKING_CNN)
     read_dumped_input_inside(config->getTrainPath(), trainX, end_time, input_neurons);
     std::vector<int> my_label(1, 5);
     trainY = new cuMatrix<int>(1, 1, 1);

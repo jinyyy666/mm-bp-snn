@@ -455,7 +455,7 @@ void Config:: get_layers_config(string &str){
             sprintf(logStr, "refOuputTrainPath  : %s\n", ref_paths[std::string("refOutputTrainPath")].c_str());LOG(logStr, "Result/log.txt");
             sprintf(logStr, "refOutputTestPath  : %s\n", ref_paths[std::string("refOutputTestPath")].c_str());LOG(logStr, "Result/log.txt");
         }
-        else if(type == std::string("SPIKING")){ 
+        else if(type == std::string("SPIKING") || type == std::string("SOFTMAXSPIKING")){ 
             int num_classes = get_word_int(layers[i], "NUM_CLASSES");
 
             int num_neurons = get_word_int(layers[i], "NUM_NEURONS");
@@ -493,7 +493,7 @@ void Config:: get_layers_config(string &str){
                          undesired_level, desired_level, margin, ref_paths, has_bias, dummy_freq);
             m_classes = num_classes;
             char logStr[256];
-            sprintf(logStr, "\n\n********Spiking Layer********\n");LOG(logStr, "Result/log.txt");
+            sprintf(logStr, "\n\n********%s Layer********\n", type.c_str());LOG(logStr, "Result/log.txt");
             sprintf(logStr, "NAME               : %s\n", name.c_str());LOG(logStr, "Result/log.txt");
             sprintf(logStr, "NUM_NEURONS        : %d\n", num_neurons);LOG(logStr, "Result/log.txt");
             sprintf(logStr, "INPUT              : %s\n", input.c_str());LOG(logStr, "Result/log.txt");
@@ -518,23 +518,6 @@ void Config:: get_layers_config(string &str){
             sprintf(logStr, "refOutputTestPath  : %s\n", ref_paths[std::string("refOutputTestPath")].c_str());LOG(logStr, "Result/log.txt");
             sprintf(logStr, "ADD_BIAS           : %d\n", has_bias);LOG(logStr, "Result/log.txt");
             sprintf(logStr, "BIAS_FREQ          : %d\n", dummy_freq);LOG(logStr, "Result/log.txt");
-        }
-        else if(type == std::string("SOFTMAXSPIKING")){
-            int num_classes = get_word_int(layers[i], "NUM_CLASSES");
-            m_classes = num_classes;
-            float wd = get_word_float(layers[i], "WEIGHT_DECAY");
-            float initW = get_word_float(layers[i], "initW");
-            std::string initType = get_word_type(layers[i], "initType");
- 
-            layer = new ConfigSoftMaxSpiking(name, input, type, num_classes, wd, initW);
-
-            char logStr[256];
-            sprintf(logStr, "\n\n********softmax spiking Layer********\n"); LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "NAME          : %s\n", name.c_str()); LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "NUM_CLASSES   : %d\n", num_classes); LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "WEIGHT_DECAY  : %f\n", wd);LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "initW         : %f\n", initW);LOG(logStr, "Result/log.txt");
-            sprintf(logStr, "initType      : %s\n", initType.c_str());LOG(logStr, "Result/log.txt");
         }
 
         insertLayerByName(name, layer);

@@ -1,245 +1,273 @@
 #include "SoftMaxSpiking.h"
 #include "../common/cuBase.h"
-#include "../common/cuMatrix.h"
 #include "../common/Config.h"
-#include "../layers/BranchLayer.h"
+#include "../common/util.h"
+#include "../readData/readSpeechData.h"
+#include <fstream>
+#include <assert.h>
 #include <math.h>
 
+//#define DEBUG
+#define I_IDX 0
+#define O_IDX 0
+
 /*
-* function: normalize the fire counts by the max count for SNN
-* blocks  : dim3(batch)
-* threads : dim3(min(1024, inputDim))
-*/
-__global__ void g_normalize_fireCount(int * inputs, float * inputs_float, int rows, int cols)
-{
-    extern __shared__ int _max[];
-    int batchId = blockIdx.x;
-    int len = blockDim.x;
-    int id = threadIdx.x;
+ * dim3 block = dim3(batch);
+ * dim3 thread= dim3(min(1024, outputSize));
+ */
+__global__ void g_getSoftMaxP(
+    float* softMaxP, 
+    int* batchFireCount, 
+    int outputSize);
+    
+/*
+ * dim3 block = dim3(1);
+ * dim3 thread= dim3(256);
+ */
+__global__ void g_getSoftMaxCost_output(
+    int*   fireCount,
+    float* groundTruth,
+    float* cost,
+    int*   y,
+    int    batch,
+    int    cols);
 
-    _max[id] = 0;
-    __syncthreads();
-
-    for(int tid = 0; tid < cols; tid += blockDim.x){
-        int ttid = tid + threadIdx.x;
-        if(ttid < cols){
-            _max[threadIdx.x] = max(_max[threadIdx.x], inputs[ttid + batchId * cols]);
-        }
-    }
-    int fire_count = inputs[id + batchId * cols];
-
-    while(len != 1)
-    { 
-        __syncthreads();
-        int skip = (len + 1)>>1;
-        if(id < skip && (id + skip) < len)
-        {
-            _max[id] = max(_max[id],  _max[id + skip]);
-        }
-        len = skip;
-    }
-    __syncthreads();
-    inputs_float[id + batchId * cols] = float(fire_count);///float(_max[0]); // be careful of zero fire count
-}
-
-
-void SoftMaxSpiking::feedforward()
-{
-	dim3 block  = batch;
-	int threads = min(1024, inputDim);
-	// normalize the fire counts by the max count
-	g_normalize_fireCount<<<block, threads, sizeof(int) * threads>>>(
-		inputs->getDev(),
-		inputs_float->getDev(), 
-		inputs->rows, 
-		inputs->cols);
-	checkCudaErrors(cudaStreamSynchronize(0));
-	getLastCudaError("g_normalize_fireCount");
-
-	matrixMulTB(inputs_float,
-		w, outputs);
-
-	threads = min(512, outputs->cols);
-	g_getSoftMaxP<<<outputs->rows, threads, sizeof(float) * threads * 2>>>(
-		outputs->getDev(),
-		b->getDev(), 
-		outputs->cols);
-	cudaStreamSynchronize(0);
-	getLastCudaError("g_getSoftMaxP");
-}
-
-void SoftMaxSpiking::backpropagation()
-{
-	g_getCost_1<<<dim3(1), dim3(256), sizeof(float) * 256>>>(outputs->getDev(), groundTruth->getDev(),
-		cost->getDev(), predict, outputs->rows, outputs->cols, batch);
-	cudaStreamSynchronize(0);
-	getLastCudaError("g_getCost_1");
-
-	g_getSoftMaxDelta<<<dim3(1), dim3(256)>>>(curDelta->getDev(),
-		outputs->getDev(),
-		groundTruth->getDev(), curDelta->getLen());
-	cudaStreamSynchronize(0);
-    getLastCudaError("g_getSoftMaxDelta");
-
-	matrixMul(curDelta, w, preDelta);
-
-}
-
-void SoftMaxSpiking::getGrad()
-{
-	matrixMulTA(curDelta, inputs_float, wgrad);
-
-	g_getSmrWgrad<<<dim3(1), dim3(256)>>>(wgrad->getDev(),
-		w->getDev(), lambda, wgrad->getLen(), batch);
-	cudaStreamSynchronize(0);
-	getLastCudaError("g_getSmrWgrad");
-
-	if(curDelta->rows > MAX_THREADS)
-	{
-		printf("getSoftMaxDelta g_getBgrad > MAX_THREADS\n");
-		exit(0);
-	}
-	g_getBgrad<<<dim3(curDelta->cols), dim3(curDelta->rows), 
-		sizeof(float) * curDelta->rows>>>(
-		curDelta->getDev(), 
-		bgrad->getDev(),
-		batch);
-	cudaStreamSynchronize(0);
-	getLastCudaError("g_getBgrad");
-}
-
-void SoftMaxSpiking::updateWeight()
-{
-	g_vecAdd<<<dim3(min((momentum_w->getLen() + 255) / 256, 512)),
-		dim3(256), 0, Layers::instance()->get_stream()>>>(
-		momentum_w->getDev(), 
-		wgrad->getDev(), 
-		w->getDev(),
-		momentum_b->getDev(), 
-		bgrad->getDev(), 
-		b->getDev(), 
-		wgrad->getLen(),
-		bgrad->getLen(),
-		Config::instance()->getMomentum(), 
-		Config::instance()->getLrate(), Config::instance()->getLrate());
-}
-
-void SoftMaxSpiking::clearMomentum()
-{
-	momentum_b->gpuClear();
-	momentum_w->gpuClear();
-}
 
 void SoftMaxSpiking::calCost()
 {
     cost->gpuClear();
-	g_getCost_2<<<dim3(1), dim3(256), sizeof(float) * 256>>>(cost->getDev(),  w->getDev(), lambda,
-		w->getLen());
-	cudaStreamSynchronize(0);
-	getLastCudaError("g_getCost_2");
+    if(predict == NULL){
+        printf("Warning::Try to compute the cost when the predict is not properly set!\n ");
+        return;
+    }
+    g_getCost_1<<<dim3(1), dim3(256), sizeof(float) * 256>>>(softMaxP->getDev(),
+            groundTruth->getDev(),
+            cost->getDev(),
+            predict,
+            softMaxP->rows,
+            softMaxP->cols,
+            batch);
+    cudaStreamSynchronize(0);
+    getLastCudaError("SoftMaxSpiking:g_getCost_1");
 }
 
-
-void SoftMaxSpiking::initRandom()
+void SoftMaxSpiking::feedforward()
 {
-    ConfigBase * config = (ConfigBase*)Config::instance()->getLayerByName(m_name);
-	float initW = config->m_initW;
+    if((inputs == NULL))
+    {
+        printf("SoftMaxSpiking init error\n");
+        exit(0);
+    }
 
-	if(config->isGaussian()){
-		float epsilon = initW;
-		for(int c = 0; c < w->channels; c++){
-			float r1 = 0.01f + 5.0f * (rand()) / RAND_MAX;
-			float r2 = 0.01f + 5.0f * (rand()) / RAND_MAX;
-			createGaussian(w->getHost() + c * w->getArea(), r1,r2,
-				w->rows, w->cols, w->channels,
-				epsilon);
-		}
-	}
-	else{
-		for(int j = 0; j < w->getLen(); j++){
-			w->getHost()[j] =  initW * (2.0f * rand() / RAND_MAX - 1.0f);
-		}
-	}
-	w->toGpu();
+    // fast input response
+    g_cast_bool_2_float<<<dim3(batch, endTime), min(1024, inputSize)>>>(inputs->getDev(), endTime, inputSize, inputs->cols, inputs->channels, batch, inputs_float->getDev());
+    matrixMul(w, inputs_float, inputs_resp_tmp); //input_resp_tmp rows:outputSize; cols:endTime*batch
+    g_transform_2_batch<<<dim3(batch, outputSize), min(1024, endTime)>>>(inputs_resp_tmp->getDev(), endTime, outputSize, batch, inputs_resp->getDev());
+
+    // convert (batch, inputDim2*endTime, amount) to (batch, amount*inputDim2*endTime, 1)
+    g_convert_spiketimes<<<dim3(batch, endTime), min(1024, inputSize)>>>(inputs_time->getDev(), preFireCount->getDev(), preFireCount->getArea(), endTime, inputSize, inputs_time->cols, inputs_time->channels, batch, inputs_time_format->getDev());
+    // convert (batch, inputDim2, amount) to (batch, amount*inputDim2, 1)
+    g_convert_firecounts<<<dim3(batch), min(1024, inputSize)>>>(preFireCount->getDev(), preFireCount->getArea(), inputSize, preFireCount->cols, preFireCount->channels, batch, preFireCount_format->getDev());
+
+    dim3 thread= dim3(min(1024, outputSize));
+    dim3 block = dim3(batch);
+    ConfigSpiking * config = (ConfigSpiking*) Config::instance()->getLayerByName(m_name); 
+    int dummyFreq = config->getBiasFreq();
+
+    g_Spiking_feedforward<<<block, thread>>>(
+            inputs_resp->getDev(),
+            w->getDev(),
+            w_laterial == NULL ? NULL : w_laterial->getDev(),
+            b->getDev(),
+            outputs->getDev(),
+            fireCount->getDev(),
+            inputSize,
+            outputSize,
+            endTime,
+            threshold,
+            dummyFreq,
+            T_REFRAC,
+            TAU_M,
+            TAU_S);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("SoftMaxSpiking::g_Spiking_feedforward");
+
+    block = dim3(batch, 1);
+    thread = dim3(min(outputSize, 1024));
+
+    // transform the binary response matrix to the spike times
+    g_response_2_spiketime<<<block, thread>>>(
+            outputs->getDev(),
+            outputs_time->getDev(),
+            outputs->getArea(),
+            outputSize,
+            endTime);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("SoftMaxSpiking:g_response_2_spiketime");
+
+    g_getSoftMaxP<<<block, thread, sizeof(float) * outputSize * 2>>>(softMaxP->getDev(), fireCount->getDev(), outputSize);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("SoftMaxSpiking:g_getSoftMaxP");
+   
 }
+
+void SoftMaxSpiking::backpropagation()
+{ 
+    // compute the cost function
+    g_getCost_1<<<dim3(1), dim3(256), sizeof(float) * 256>>>(softMaxP->getDev(), groundTruth->getDev(), cost->getDev(), predict, softMaxP->rows, softMaxP->cols, batch);
+    cudaStreamSynchronize(0);
+    getLastCudaError("SoftMaxSpiking::g_getCost_1");
+
+    // compute the delta (error)
+    g_getSoftMaxDelta<<<dim3(1), dim3(256)>>>(curDelta->getDev(), softMaxP->getDev(), groundTruth->getDev(), curDelta->getLen());
+    cudaStreamSynchronize(0);
+    getLastCudaError("SoftMaxSpiking::g_getSoftMaxDelta");
+
+    // apply the sample weights
+    g_boostWeight_output<<<dim3(batch), dim3(outputSize)>>>(curDelta->getDev(), sample_weights, curDelta->getLen());
+    cudaStreamSynchronize(0);
+    getLastCudaError("SoftMaxSpiking::g_boostWeight_output");
+
+    // compute the lateral factors if applicable
+    if(lateralFactor != NULL && w_laterial != NULL){
+        int threads = min(outputSize, 1024);
+        g_getLateralFactor_output<<<dim3(batch, outputSize), threads, sizeof(float) * threads>>>(
+            outputs_time->getDev(),
+            fireCount->getDev(),
+            lateralW,
+            predict,
+            lateralFactor->getDev(),
+            threshold,
+            outputSize,
+            endTime,
+            T_REFRAC,
+            TAU_M,
+            TAU_S);
+        cudaStreamSynchronize(0);
+        getLastCudaError("SoftMaxSpiking::g_getLateralFactor_output");
+    }
+
+    // modify the output spikes of the target neuron if it does not fire
+    // tricky: modify both the spike trains and output fire counts!
+    g_modifySpikes<<<dim3(batch), dim3(min(outputSize, 1024))>>>(outputs->getDev(), predict, fireCount->getDev(), DESIRED_LEVEL, endTime, outputSize);
+    cudaStreamSynchronize(0);
+    getLastCudaError("SoftMaxSpiking::g_modifySpikes");
+
+    // retransform the binary matrix to the spike times since the outputs might be changed
+    g_response_2_spiketime<<<dim3(batch, 1), dim3(min(outputSize, 1024))>>>(
+            outputs->getDev(),
+            outputs_time->getDev(),
+            outputs->getArea(),
+            outputSize,
+            endTime);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("SoftMaxSpiking:g_response_2_spiketime");
+
+    // pre compute the accumulative synaptic effect, and effect ratio (if applicable)
+    dim3 thread = dim3(min(1024, outputSize));
+    dim3 block  = dim3(batch, inputSize);
+    cudaFuncSetCacheConfig(g_Spiking_synaptic_effect, cudaFuncCachePreferL1);
+    g_Spiking_synaptic_effect<<<block, thread>>>(
+        inputs_time_format->getDev(),
+        outputs_time->getDev(),
+        preFireCount_format->getDev(),
+        fireCount->getDev(),
+        w->getDev(),
+        accEffect->getDev(),
+        effectRatio == NULL ? NULL : effectRatio->getDev(),
+        inputSize,
+        outputSize,
+        endTime,
+        T_REFRAC,
+        TAU_M,
+        TAU_S);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("g_SoftMaxSpiking_synaptic_effect");
+   
+    // divide the curDelta by vth
+    block = dim3(batch, 1);
+    thread = dim3(min(1024, outputSize));
+    g_divide_by_threshold<<<block, thread>>>(curDelta->getDev(), curDelta->getArea(), curDelta->cols, threshold);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("g_divide_by_threshold");
+   
+    // compute preDelta: curDelta: batch * outputSize; w: outputSize * inputSize
+    if(preDelta == NULL){
+        ConfigSpiking* config = (ConfigSpiking*)Config::instance()->getLayerByName(m_name);
+        assert(config->m_input == "data");
+    }
+    else{
+        if(effectRatio != NULL){
+            matrixMul(curDelta, effectRatio, preDelta_format);
+        }
+        else{
+            matrixMul(curDelta, w, preDelta_format);
+        }
+        // preDelta_format: (batch, channels * size, 1) -> preDelta: (batch, size, channels)
+        block = batch;
+        thread = min(512, preDelta->channels * preDelta->cols);
+        g_preDeltaFormat<<<block, thread>>>(preDelta_format->getDev(), preDelta->getDev(),
+            preDelta->rows, preDelta->cols, preDelta->channels);
+        cudaStreamSynchronize(0);
+        getLastCudaError("g_preDeltaFormat");
+    } 
+}
+
+/*
+* block   =  batch
+* threads =  outputSize
+* shared : sizeof(float) * outputSize * 2
+*/
+__global__ void g_getSoftMaxP(float* softMaxP, int* batchFireCount, int outputSize)
+{
+	int batchId = blockIdx.x;
+    int tid = threadIdx.x;
+	extern __shared__ float _share[];
+	float * _max = _share;
+	float * _sum = _share + blockDim.x;
+
+	float* sp = softMaxP + batchId * outputSize;
+    int* fireCount = batchFireCount + batchId * outputSize;
+
+	_sum[tid] = 0.0;
+	_max[tid] = float(fireCount[tid]);
+    __syncthreads();
 	
-void SoftMaxSpiking::initFromCheckpoint(FILE* file)
-{
-	float val = 0.0;
-	for(int i = 0; i < w->rows; i++){
-		for(int j=0; j< w->cols; j++){
-            if(fscanf(file, "%f", &val) == EOF){
-                printf("scan fail for layer: %s", m_name.c_str());
-                assert(0);
-            }
-			w->set(i,j,0,val);
+    int len = blockDim.x;
+	while(len != 1)
+	{
+		__syncthreads();
+		int skip = (len + 1) >> 1;
+		if(tid < skip && (tid + skip) < len)
+		{
+            _max[tid] = max(_max[tid], _max[tid + skip]);
 		}
+		len = skip;
 	}
-	
-	for(int i = 0; i < b->rows; i++){
-		for(int j = 0; j < b->cols; j++){
-            if(fscanf(file, "%f ", &val) == EOF){
-                printf("scan fail for layer: %s", m_name.c_str());
-                assert(0);
-            }
-			b->set(i,j,0, val);
+	__syncthreads();
+
+    float prob = __expf(float(fireCount[tid]) - _max[0]);
+    sp[tid] = prob; 
+    _sum[tid] = prob;
+
+	len = blockDim.x;
+	while(len != 1)
+	{
+		__syncthreads();
+		int skip = (len + 1) >> 1;
+		if(tid < skip && (tid + skip) < len)
+		{
+			_sum[tid] += _sum[tid + skip];
 		}
+		len = skip;
 	}
-	w->toGpu();
-	b->toGpu();
+	__syncthreads();
+    sp[tid] /= _sum[0];
 }
 
-void SoftMaxSpiking::save(FILE* file)
+
+SoftMaxSpiking::SoftMaxSpiking(std::string name):
+Spiking(name)
 {
-	w->toCpu();
-	b->toCpu();
-	for(int c = 0; c < w->channels; c++){
-		for(int i = 0; i< w->rows; i++){
-			for(int j=0; j< w->cols; j++){
-				fprintf(file, "%f ", w->get(i,j,c)); 
-			}
-		}
-	}
-
-	for(int c = 0; c < b->channels; c++){
-		for(int i = 0; i < b->rows; i++){
-			for(int j = 0; j < b->cols;  j++){
-				fprintf(file, "%f ", b->get(i,j,c));
-			}
-		}
-	}
-}
-
-SoftMaxSpiking::SoftMaxSpiking(std::string name)
-{
-	m_name = name;
-	ConfigSoftMaxSpiking* config = (ConfigSoftMaxSpiking*)Config::instance()->getLayerByName(m_name);
-	SpikingLayerBase * preLayer = (SpikingLayerBase*)Layers::instance()->get(config->m_input);
-	
-	inputs = preLayer->getFireCount();
-	preDelta = preLayer->getCurDelta();
-
-	batch = Config::instance()->getBatchSize();
-	lambda = config->m_weightDecay;
-
-	inputDim = preLayer->outputDim;
-	outputDim = config->m_numClasses;
-
-	inputs_float = new cuMatrix<float>(inputs->rows, inputs->cols, 1);
-	outputs = new cuMatrix<float>(batch, outputDim, 1);
-	curDelta= new cuMatrix<float>(batch, outputDim, 1);
-
-    w     = new cuMatrix<float>(outputDim, inputDim, 1);
-	wgrad = new cuMatrix<float>(outputDim, inputDim, 1);
-
-	b     = new cuMatrix<float>(outputDim, 1, 1);
-	bgrad = new cuMatrix<float>(outputDim, 1, 1);
-
-	momentum_w = new cuMatrix<float>(outputDim, inputDim, 1);
-	momentum_b = new cuMatrix<float>(outputDim, 1, 1);
-
-	groundTruth = new cuMatrix<float>(batch, outputDim, 1);
-
-	this->initRandom();
-	Layers::instance()->set(m_name, this);
+    softMaxP = new cuMatrix<float>(batch, outputSize, 1);
 }
