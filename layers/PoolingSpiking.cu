@@ -30,7 +30,8 @@ __global__ void g_PoolingSpiking_feedforward(
 	int kAmount,
     float vth,
     int T_REFRAC,
-    float TAU_M,
+    float* tau,
+    float* res,
     float TAU_S);
 
 /*
@@ -117,6 +118,34 @@ void PoolingSpiking::verify(const std::string& phrase)
     printf("Verification for the layer: %s at %s phrase. Pased!!\n", m_name.c_str(), phrase.c_str());
 }
 
+void PoolingSpiking::intrinsicPlasticity()
+{
+    int outputSize2 = outputDim * outputDim;
+    dim3 thread = dim3(min(1024, outputSize2), outputAmount);
+    int block  = batch;
+    int u = 0.2;
+    g_intrinsic_plasticity<<<block, thread>>>(fireCount->getDev(), taugradTmp->getDev(), resgradTmp->getDev(), tau->getDev(), res->getDev(), endTime, tau->getArea(), outputSize2, T_REFRAC, threshold, u);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("ConvSpiking::g_intrinsic_plasticity");
+
+    thread = batch;
+    g_intrinsic_plasticity_gradadd<<<dim3(outputSize2, outputAmount), thread, 2 * sizeof(float) * batch>>>(taugradTmp->getDev(), taugrad->getDev(), resgradTmp->getDev(), resgrad->getDev(), batch, taugradTmp->getArea(), outputSize2);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("ConvSpiking::g_intrinsic_plasticity_add");
+
+
+    block = min((tau->getLen() + 255)/ 256, 5120);
+    thread = 256;
+    g_intrinsic_plasticity_update<<<block, thread, 0, Layers::instance()->get_stream()>>>(
+        taugrad->getDev(),
+        resgrad->getDev(),
+        tau->getDev(),
+        res->getDev(),
+        tau->getLen(),
+        0.5);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("ConvSpiking::g_intrinsic_plasticity");
+}
 
 void PoolingSpiking::feedforward()
 {
@@ -154,7 +183,8 @@ void PoolingSpiking::feedforward()
         outputAmount,
         threshold,
         T_REFRAC,
-        TAU_M,
+        tau->getDev(),
+        res->getDev(),
         TAU_S);
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("PoolSpiking::g_PoolingSpiking_feedforward");
@@ -260,6 +290,19 @@ PoolingSpiking::PoolingSpiking(std::string name)
 	curDelta = new cuMatrix<float>(batch, outputDim * outputDim, outputAmount);
     fireCount= new cuMatrix<int>(batch, outputDim * outputDim, outputAmount);
 
+    tau        = new cuMatrix<float>(1,  outputDim * outputDim, outputAmount);
+    res        = new cuMatrix<float>(1,  outputDim * outputDim, outputAmount);
+    taugrad    = new cuMatrix<float>(1,  outputDim * outputDim, outputAmount);
+    resgrad    = new cuMatrix<float>(1,  outputDim * outputDim, outputAmount);
+    taugradTmp     = new cuMatrix<float>(batch,  outputDim * outputDim, outputAmount);
+    resgradTmp     = new cuMatrix<float>(batch,  outputDim * outputDim, outputAmount); 
+    for(int i = 0; i < tau->getLen(); i++){
+        tau->getHost()[i] = TAU_M;
+        res->getHost()[i] = TAU_M;
+    }
+    tau->toGpu();
+    res->toGpu();
+
     output_train_ref = NULL;
     output_test_ref = NULL;
     if(Config::instance()->getIsGradientChecking())
@@ -338,7 +381,8 @@ __global__ void g_PoolingSpiking_feedforward(
 	int kAmount,
     float vth,
     int T_REFRAC,
-    float TAU_M,
+    float* tau,
+    float* res,
     float TAU_S)
 {
 	int batchId = blockIdx.x;
@@ -363,6 +407,8 @@ __global__ void g_PoolingSpiking_feedforward(
             int t_ref= 0;
             float response = 0.0f;
             int fire_count = 0;
+            float TAU_M = tau[k * poolSize2 + o_idx];
+            float r = res[k * poolSize2 + o_idx];
 
             for(int t = 0; t < endTime; t++){
                 v  -= v / TAU_M;
@@ -373,7 +419,7 @@ __global__ void g_PoolingSpiking_feedforward(
                 }
                 response = curResp[o_idx + (t - 1) * poolSize2];
 
-                ep += response;
+                ep += response * r / TAU_M;
                 v += ep/TAU_S;  
                 if(t_ref > 0){
                     v = 0;

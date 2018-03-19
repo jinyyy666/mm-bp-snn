@@ -21,6 +21,7 @@ public:
     void verify(const std::string& phrase){};
 	void getGrad(){};
 	void updateWeight(){};
+    void intrinsicPlasticity(){};
 	void clearMomentum(){};
 
 	void calCost(){};

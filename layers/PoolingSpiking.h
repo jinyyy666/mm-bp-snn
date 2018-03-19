@@ -16,6 +16,12 @@ public:
         delete inputs_resp;
         delete curDelta;
         delete fireCount;
+        delete tau;
+        delete res;
+        delete taugrad;
+        delete resgrad;
+        delete taugradTmp;
+        delete resgradTmp; 
 	}
 
 
@@ -23,6 +29,7 @@ public:
 	void backpropagation();
 	void getGrad(){};
 	void updateWeight(){};
+    void intrinsicPlasticity();
 	void clearMomentum(){};
 	void calCost(){};
     void loadRef();
@@ -85,6 +92,13 @@ private:
 
     cuMatrix<int>*   fireCount;
     cuMatrix<int>*   preFireCount;
+
+	cuMatrix<float>* tau;
+	cuMatrix<float>* taugrad;
+    cuMatrix<float>* taugradTmp;
+	cuMatrix<float>* res;
+	cuMatrix<float>* resgrad;
+    cuMatrix<float>* resgradTmp;
 
 	int psize;
 	int pskip;

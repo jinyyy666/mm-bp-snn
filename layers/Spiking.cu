@@ -211,6 +211,36 @@ void Spiking::calCost()
     getLastCudaError("Spiking:g_getCost_output");
 }
 
+void Spiking::intrinsicPlasticity()
+{
+    int thread = min(1024, outputSize);
+    int block  = batch;
+    int u = 0.2;
+    g_intrinsic_plasticity<<<block, thread>>>(fireCount->getDev(), taugradTmp->getDev(), resgradTmp->getDev(), tau->getDev(), res->getDev(), endTime, tau->getArea(), outputSize, T_REFRAC, threshold, u);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("Spiking::g_intrinsic_plasticity");
+
+    block  = outputSize;
+    thread = batch;
+    g_intrinsic_plasticity_gradadd<<<block, thread, 2 * sizeof(float) * batch>>>(taugradTmp->getDev(), taugrad->getDev(), resgradTmp->getDev(), resgrad->getDev(), batch, taugradTmp->getArea(), outputSize);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("Spiking::g_intrinsic_plasticity_add");
+
+
+    block = min((tau->getLen() + 255)/ 256, 5120);
+    thread = 256;
+    g_intrinsic_plasticity_update<<<block, thread, 0, Layers::instance()->get_stream()>>>(
+        taugrad->getDev(),
+        resgrad->getDev(),
+        tau->getDev(),
+        res->getDev(),
+        tau->getLen(),
+        0.5);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("Spiking::g_intrinsic_plasticity");
+
+}
+
 void Spiking::feedforward()
 {
     if((inputs == NULL))
@@ -247,7 +277,8 @@ void Spiking::feedforward()
             threshold,
             dummyFreq,
             T_REFRAC,
-            TAU_M,
+            tau->getDev(),
+            res->getDev(),
             TAU_S);
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("Spiking::g_Spiking_feedforward");
@@ -596,7 +627,20 @@ Spiking::Spiking(std::string name)
     fireCount= new cuMatrix<int>(batch, outputSize, 1);
     weightSqSum = new cuMatrix<float>(outputSize, 1, 1);
     maxCount    = new cuMatrix<int>(batch, 1, 1);
-    accEffect   = new cuMatrix<float>(batch, outputSize * inputSize, 1); 
+    accEffect   = new cuMatrix<float>(batch, outputSize * inputSize, 1);
+
+    tau        = new cuMatrix<float>(1, outputSize, 1);
+    res        = new cuMatrix<float>(1, outputSize, 1);
+    taugrad    = new cuMatrix<float>(1, outputSize, 1);
+    resgrad    = new cuMatrix<float>(1, outputSize, 1);
+    taugradTmp     = new cuMatrix<float>(batch, outputSize, 1);
+    resgradTmp     = new cuMatrix<float>(batch, outputSize, 1); 
+    for(int i = 0; i < tau->getLen(); i++){
+        tau->getHost()[i] = TAU_M;
+        res->getHost()[i] = TAU_M;
+    }
+    tau->toGpu();
+    res->toGpu();
 
     predict = NULL;
 
@@ -1454,7 +1498,8 @@ __global__ void g_Spiking_feedforward(
     float vth,
     int dummyFreq, 
     int T_REFRAC,
-    float TAU_M,
+    float* tau,
+    float* res,
     float TAU_S)
 {
 	int batchId = blockIdx.x;
@@ -1476,6 +1521,8 @@ __global__ void g_Spiking_feedforward(
             int t_ref= 0;
             float response = 0.0f;
             int fire_count = 0;
+            float TAU_M = tau[o_idx];
+            float r = res[o_idx];
             for(int t = 0; t < endTime; t++){
                 // 1. leakage
                 v  -= v / TAU_M;
@@ -1491,7 +1538,7 @@ __global__ void g_Spiking_feedforward(
                 response = d_Spiking_accumulate_spikes(inputSize, outputSize, curInput, curOutput, o_idx, w, w_l, b, t, dummyFreq, endTime);
                 
                 // 3. Add up the response to ep (state variable)
-                ep += response;
+                ep += response * r / TAU_M;
 
                 // 4. Update the vmem accordingly
                 v += ep/TAU_S;

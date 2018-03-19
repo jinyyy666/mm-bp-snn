@@ -19,6 +19,12 @@ public:
         delete curDelta;
         delete fireCount;
         delete weightSqSum;
+        delete tau;
+        delete res;
+        delete taugrad;
+        delete resgrad;
+        delete taugradTmp;
+        delete resgradTmp;
         delete b1_t;
         delete b2_t;
         delete output_train_ref;
@@ -30,6 +36,7 @@ public:
 	void backpropagation();
 	void getGrad();
 	void updateWeight();
+    void intrinsicPlasticity();
 	void clearMomentum();
 	void calCost();
     void loadRef();
@@ -126,6 +133,13 @@ private:
 	cuMatrixVector<float> wgradTmp;
 	cuMatrixVector<float> b;
 	cuMatrixVector<float> bgrad;
+	cuMatrix<float>* tau;
+	cuMatrix<float>* taugrad;
+    cuMatrix<float>* taugradTmp;
+	cuMatrix<float>* res;
+	cuMatrix<float>* resgrad;
+    cuMatrix<float>* resgradTmp;
+
 	cuMatrixVector<float> momentum_w;
 	cuMatrixVector<float> momentum_b;
 	cuMatrixVector<float> g1_w;

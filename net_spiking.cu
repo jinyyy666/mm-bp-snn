@@ -272,6 +272,19 @@ void resultPredict(int* y, int* vote, int start)
     outputPredict(vote, start);
 }
 
+void networkPretrain(int start)
+{
+    for(int i = 0; i < (int)spiking_que.size(); i++){
+        LayerBase* layer = Layers::instance()->get(spiking_que[i]->m_name);
+        layer->feedforward();
+    }
+    
+    for(int i = 0; i < (int)spiking_que.size(); i++){
+        SpikingLayerBase* layer = (SpikingLayerBase*)Layers::instance()->get(spiking_que[i]->m_name);
+        layer->intrinsicPlasticity();
+    }
+}
+
 void gradientChecking(bool**x, int*y, int batch, int nclasses, cublasHandle_t handle)
 {
 }
@@ -377,6 +390,33 @@ void verifyResult(std::string phrase)
     for(int i = 0; i < (int)spiking_que.size(); i++){
         SpikingLayerBase* layer = (SpikingLayerBase*) Layers::instance()->get(spiking_que[i]->m_name);
         layer->verify(phrase);
+    }
+}
+
+
+//* pretrain the network with IP rule, this will change the time constants and the t_ref
+void pretrainNetwork(cuMatrixVector<bool>& x, int batch)
+{
+    DataLayerSpiking *dl = static_cast<DataLayerSpiking*>(Layers::instance()->get("data"));
+    dl->getBatchSpikes(x, 0);
+ 
+    for (int k = 0; k < ((int)x.size() + batch - 1) / batch; k ++) {
+        dl->synchronize();
+        int start = k * batch;
+        printf("pretrain %2d%%", 100 * start / ((int)x.size() + batch - 1));
+
+        if(start + batch <= (int)x.size() - batch)
+            dl->getBatchSpikes(x, start + batch);
+        else{
+            int tstart = x.size() - batch;
+            dl->getBatchSpikes(x, tstart);
+        }
+
+        if(start + batch > (int)x.size()){
+            start = (int)x.size() - batch;
+        }
+        networkPretrain(k * batch - start);
+        printf("\b\b\b\b\b\b\b\b\b");
     }
 }
 
@@ -490,6 +530,8 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
 
     sprintf(logStr, "correct is %d\n", cuSCorrect->get(0,0,0));
     LOG(logStr, "Result/log.txt");
+
+    //pretrainNetwork(x, batch);
 
     int epochs = Config::instance()->getTestEpoch();
 

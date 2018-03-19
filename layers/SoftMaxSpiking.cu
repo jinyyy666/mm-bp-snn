@@ -87,7 +87,8 @@ void SoftMaxSpiking::feedforward()
             threshold,
             dummyFreq,
             T_REFRAC,
-            TAU_M,
+            tau->getDev(),
+            res->getDev(),
             TAU_S);
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("SoftMaxSpiking::g_Spiking_feedforward");

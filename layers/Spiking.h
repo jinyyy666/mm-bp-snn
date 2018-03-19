@@ -13,7 +13,7 @@
  */
 __global__ void g_Spiking_feedforward(float* inputs_resp, float* w, float* ws_lat, float* b, 
 bool* outputs, int* fireCount, int inputSize, int outputSize, int endTime, float vth, int dummyFreq, 
-int T_REFRAC, float TAU_M, float TAU_S);
+int T_REFRAC, float* tau, float* res, float TAU_S);
 
 /*
  * dim3 block = dim3(batch);
@@ -66,10 +66,16 @@ public:
         delete groundTruth;
         delete w;
         delete b;
+        delete tau;
+        delete res;
         delete wgrad;
         delete bgrad;
+        delete taugrad;
+        delete resgrad;
         delete wgradTmp;
         delete bgradTmp;
+        delete taugradTmp;
+        delete resgradTmp;
         delete w_laterial;
         delete momentum_w;
         delete momentum_b;
@@ -85,6 +91,7 @@ public:
     void verify(const std::string& phrase);
 	void getGrad();
 	void updateWeight();
+    void intrinsicPlasticity();
 	void clearMomentum();
 	virtual void calCost();
     void loadRef();
@@ -203,6 +210,12 @@ protected:
 	cuMatrix<float>* b;
 	cuMatrix<float>* bgrad;
     cuMatrix<float>* bgradTmp;
+	cuMatrix<float>* tau;
+	cuMatrix<float>* taugrad;
+    cuMatrix<float>* taugradTmp;
+	cuMatrix<float>* res;
+	cuMatrix<float>* resgrad;
+    cuMatrix<float>* resgradTmp;
 	cuMatrix<float>* momentum_w;
 	cuMatrix<float>* momentum_b;
 	cuMatrix<float>* g1_w;

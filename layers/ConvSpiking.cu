@@ -43,7 +43,8 @@ __global__ void g_ConvSpiking_feedforward(
         int outputArea,
         float vth,
         int T_REFRAC,
-        float TAU_M,
+        float* tau,
+        float* res,
         float TAU_S);
 
 /*
@@ -107,7 +108,6 @@ __global__ void g_ConvSpiking_Bgrad(float* delta,
 	int batch,
 	int deltaArea);
 
-
 void ConvSpiking::calCost()
 {
 	cost->gpuClear();
@@ -117,6 +117,36 @@ void ConvSpiking::calCost()
 		w[0]->getLen());
 	cudaStreamSynchronize(0);
 	getLastCudaError("ConvSpiking:getCost");
+}
+
+void ConvSpiking::intrinsicPlasticity()
+{
+    int outputSize2 = outputDim * outputDim;
+    dim3 thread = dim3(min(1024, outputSize2), outputAmount);
+    int block  = batch;
+    int u = 0.2;
+    g_intrinsic_plasticity<<<block, thread>>>(fireCount->getDev(), taugradTmp->getDev(), resgradTmp->getDev(), tau->getDev(), res->getDev(), endTime, tau->getArea(), outputSize2, T_REFRAC, threshold, u);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("ConvSpiking::g_intrinsic_plasticity");
+
+    thread = batch;
+    g_intrinsic_plasticity_gradadd<<<dim3(outputSize2, outputAmount), thread, 2 * sizeof(float) * batch>>>(taugradTmp->getDev(), taugrad->getDev(), resgradTmp->getDev(), resgrad->getDev(), batch, taugradTmp->getArea(), outputSize2);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("ConvSpiking::g_intrinsic_plasticity_add");
+
+
+    block = min((tau->getLen() + 255)/ 256, 5120);
+    thread = 256;
+    g_intrinsic_plasticity_update<<<block, thread, 0, Layers::instance()->get_stream()>>>(
+        taugrad->getDev(),
+        resgrad->getDev(),
+        tau->getDev(),
+        res->getDev(),
+        tau->getLen(),
+        0.5);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("ConvSpiking::g_intrinsic_plasticity");
+
 }
 
 void ConvSpiking::feedforward()
@@ -162,7 +192,8 @@ void ConvSpiking::feedforward()
         outputs->getArea(),
         threshold,
         T_REFRAC,
-        TAU_M,
+        tau->getDev(),
+        res->getDev(),
         TAU_S);
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("ConvSpiking::g_ConvSpiking_feedforward");
@@ -454,6 +485,19 @@ ConvSpiking::ConvSpiking(std::string name)
 	curDelta = new cuMatrix<float>(batch, outputDim * outputDim, outputAmount);
     fireCount= new cuMatrix<int>(batch, outputDim * outputDim, outputAmount);
     weightSqSum = new cuMatrix<float>(outputAmount, 1, 1);
+
+    tau        = new cuMatrix<float>(1,  outputDim * outputDim, outputAmount);
+    res        = new cuMatrix<float>(1,  outputDim * outputDim, outputAmount);
+    taugrad    = new cuMatrix<float>(1,  outputDim * outputDim, outputAmount);
+    resgrad    = new cuMatrix<float>(1,  outputDim * outputDim, outputAmount);
+    taugradTmp     = new cuMatrix<float>(batch,  outputDim * outputDim, outputAmount);
+    resgradTmp     = new cuMatrix<float>(batch,  outputDim * outputDim, outputAmount); 
+    for(int i = 0; i < tau->getLen(); i++){
+        tau->getHost()[i] = TAU_M;
+        res->getHost()[i] = TAU_M;
+    }
+    tau->toGpu();
+    res->toGpu();
 
 	for(int i = 0; i < outputAmount; i++){
 		w.push_back(new cuMatrix<float>(kernelSize, kernelSize, inputAmount));
@@ -769,7 +813,8 @@ __global__ void g_ConvSpiking_feedforward(
         int outputArea,
         float vth,
         int T_REFRAC,
-        float TAU_M,
+        float* tau,
+        float* res,
         float TAU_S)
 {
     int batchId = blockIdx.x;
@@ -791,7 +836,8 @@ __global__ void g_ConvSpiking_feedforward(
             int t_ref= 0;
             float response = 0.0f;
             int fire_count = 0;
-
+            float TAU_M = tau[ok * outputSize2 + o_idx];
+            float r = res[ok * outputSize2 + o_idx];
             for(int t = 0; t < endTime; t++){
                 v  -= v / TAU_M;
                 ep -= ep / TAU_S;
@@ -802,7 +848,7 @@ __global__ void g_ConvSpiking_feedforward(
                 }
                 // get the convoluted the spikes
                 response = curResponse[o_idx + (t - 1)*outputSize2];
-                ep += response;
+                ep += response * r / TAU_M;
                 v += ep/TAU_S;
 
                 if(t_ref > 0){

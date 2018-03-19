@@ -91,6 +91,11 @@ __global__ void g_response_2_spiketime(bool* outputs, int* outputs_time, int out
 
 __global__ void g_divide_by_threshold(float * _delta, int area, int outputSize, float threshold);
 
+__global__ void g_intrinsic_plasticity(int * batchFireCount, float* tauTmp, float* resTmp, float* _tau, float * _res, int endTime, int outputArea, int outputSize, int T_REFRAC, float vth, float u);
+
+__global__ void g_intrinsic_plasticity_gradadd(float* taugradTmp, float* taugrad, float* resgradTmp, float* resgrad, int batch, int outputArea, int outputSize);
+
+__global__ void g_intrinsic_plasticity_update(float* taugrad, float* resgrad, float* tau, float* res, int len, float lr);
 /*
 function: normalize the fire counts by the max count for SNN
 threads : <<<dim3(batch), dim3(min(1024, inputDim))>>>
