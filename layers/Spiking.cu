@@ -215,7 +215,7 @@ void Spiking::intrinsicPlasticity()
 {
     int thread = min(1024, outputSize);
     int block  = batch;
-    int u = 0.2;
+    float u = 0.2;
     g_intrinsic_plasticity<<<block, thread>>>(fireCount->getDev(), taugradTmp->getDev(), resgradTmp->getDev(), tau->getDev(), res->getDev(), endTime, tau->getArea(), outputSize, T_REFRAC, threshold, u);
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("Spiking::g_intrinsic_plasticity");

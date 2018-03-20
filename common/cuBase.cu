@@ -688,8 +688,8 @@ __global__ void g_intrinsic_plasticity(int * batchFireCount, float* tauTmp, floa
                 continue;
             }
     
-            float x = vth / (__expf(1/y - T_REFRAC) - 1);
             float t = tau[o_idx];
+            float x = vth / (__expf(1/t * (1/y - T_REFRAC)) - 1);
             float r = res[o_idx];
             taugrad[o_idx] = (1/u * (T_REFRAC * y * y - y) - (2 * T_REFRAC * y - 1)) / t;
             resgrad[o_idx] = ((y * y / u - 2 * y) * t * vth + x + vth) / (r * x);
@@ -758,11 +758,12 @@ __global__ void g_intrinsic_plasticity_update(float* taugrad, float* resgrad, fl
         {
             tau[id] -= lr * taugrad[id];
             res[id] -= lr * resgrad[id];
+
+            if(tau[id] < 32)    tau[id] = 32;
+            if(tau[id] > 1024)  tau[id] = 1024;
+            if(res[id] < 32)    res[id] = 32;
+            if(res[id] > 1024)  res[id] = 1024;
         }
-        if(tau[id] < 32)    tau[id] = 32;
-        if(tau[id] > 1024)  tau[id] = 1024;
-        if(res[id] < 32)    res[id] = 32;
-        if(res[id] > 1024)  res[id] = 1024;
     }
 }
 

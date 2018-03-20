@@ -121,15 +121,16 @@ void PoolingSpiking::verify(const std::string& phrase)
 void PoolingSpiking::intrinsicPlasticity()
 {
     int outputSize2 = outputDim * outputDim;
-    dim3 thread = dim3(min(1024, outputSize2), outputAmount);
-    int block  = batch;
-    int u = 0.2;
+    dim3 thread = dim3(min(1024, outputSize2));
+    dim3 block  = dim3(batch, outputAmount);
+    float u = 0.2;
     g_intrinsic_plasticity<<<block, thread>>>(fireCount->getDev(), taugradTmp->getDev(), resgradTmp->getDev(), tau->getDev(), res->getDev(), endTime, tau->getArea(), outputSize2, T_REFRAC, threshold, u);
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("ConvSpiking::g_intrinsic_plasticity");
 
     thread = batch;
-    g_intrinsic_plasticity_gradadd<<<dim3(outputSize2, outputAmount), thread, 2 * sizeof(float) * batch>>>(taugradTmp->getDev(), taugrad->getDev(), resgradTmp->getDev(), resgrad->getDev(), batch, taugradTmp->getArea(), outputSize2);
+    block = dim3(outputSize2, outputAmount);
+    g_intrinsic_plasticity_gradadd<<<block, thread, 2 * sizeof(float) * batch>>>(taugradTmp->getDev(), taugrad->getDev(), resgradTmp->getDev(), resgrad->getDev(), batch, taugradTmp->getArea(), outputSize2);
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("ConvSpiking::g_intrinsic_plasticity_add");
 
