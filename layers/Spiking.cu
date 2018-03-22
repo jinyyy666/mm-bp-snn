@@ -1597,7 +1597,7 @@ __global__ void g_Spiking_wgrad_spiketime(
         {
             float w = idx == i_idx ? 1 : weights[idx + o_idx * inputSize];
             float e = acc_effect[idx + o_idx * inputSize];
-            _sum[idx] += w*e;
+            _sum[tid] += w*e;
         }
     }
     int len = blockDim.x;
