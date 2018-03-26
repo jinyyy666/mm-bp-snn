@@ -56,7 +56,7 @@ __global__ void g_convert(float* cuPool, float*cuPoolToFlActi, int batch, int si
 /* function: cuMatrix<int>*(batch, inputDim2*endTime, amount) 
  *           to cuMatrix<int>*(batch, amount*inputDim2*endTime, 1)
  */
-__global__ void g_convert_spiketimes(int* inputs_time, int* fireCounts, int fireArea, int endTime, int inputSize, int inputCols, int channels, int batch, int* inputs_tf);
+__global__ void g_convert_spiketimes(int* inputs_time, int endTime, int inputSize, int inputCols, int channels, int batch, int* inputs_tf);
 __global__ void g_convert_firecounts(int* counts, int area, int inputSize, int inputDim2, int channels, int batch, int* counts_f);
 
 

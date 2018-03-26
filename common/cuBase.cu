@@ -33,21 +33,6 @@ __device__ float d_dnonLinearity(float val,int NONLIN){
 	}
 }
 
-// use the binary search to find num(time) that is >= target
-__device__ int d_binary_search(int target, int * array, int size)
-{
-    int l = 0, r = size - 1;
-    while(l < r)
-    {
-        int m = l + (r - l)/2;
-        if(array[m] >= target)
-            r = m;
-        else 
-            l = m + 1;
-    }
-    return l;
-}
-
 /* given each input and output spike train of spike times, 
  * compute the accumulative synaptic effect
  * input: input spikes: endTime * inputDim
@@ -75,9 +60,7 @@ __device__ float d_Spiking_accumulate_effect(
         
         int ub = t_post;
         int lb = max(1, int(t_post - 4*TAU_M));
-        int u = ub == 1 ? 0 : d_binary_search(ub, input_time + i_idx * endTime, n_ispikes);
-        int l = lb == 1 ? 0 : d_binary_search(lb, input_time + i_idx * endTime, n_ispikes);
-        for(int j = l; j <= u; ++j){
+        for(int j = 0; j < n_ispikes; ++j){
             int t_pre = input_time[i_idx * endTime + j];
             if(t_pre < lb || t_pre >= ub)    continue;
 
@@ -523,18 +506,14 @@ __global__ void g_convert(float* cuPool, float*cuPoolToFlActi, int batch, int si
 * blocks  : dim3(batch, endTime)
 * threads : dim3(min(1024, inputSize))
 */
-__global__ void g_convert_spiketimes(int* inputs_time, int* fireCounts, int fireArea, int endTime, int inputSize, int inputCols, int channels, int batch, int* inputs_tf){
+__global__ void g_convert_spiketimes(int* inputs_time, int endTime, int inputSize, int inputCols, int channels, int batch, int* inputs_tf){
     int b = blockIdx.x;
     int t = blockIdx.y;
-    int inputDim2 = inputCols / endTime;
     for(int i = 0; i < inputSize; i += blockDim.x){
         int i_idx = i + threadIdx.x;
         if(i_idx < inputSize){
             int s = i_idx / channels;
             int c = i_idx % channels;
-            int f_cnt = fireCounts[c * fireArea + b * inputDim2 + s];
-            if(t >= f_cnt)
-                return;
             int index = c * batch * inputCols + b * inputCols + s*endTime + t;
             inputs_tf[b * inputCols * channels + c*inputCols + s*endTime+ t] = inputs_time[index];
         }

@@ -227,7 +227,7 @@ void Spiking::feedforward()
     g_transform_2_batch<<<dim3(batch, outputSize), min(1024, endTime)>>>(inputs_resp_tmp->getDev(), endTime, outputSize, batch, inputs_resp->getDev());
 
     // convert (batch, inputDim2*endTime, amount) to (batch, amount*inputDim2*endTime, 1)
-    g_convert_spiketimes<<<dim3(batch, endTime), min(1024, inputSize)>>>(inputs_time->getDev(), preFireCount->getDev(), preFireCount->getArea(), endTime, inputSize, inputs_time->cols, inputs_time->channels, batch, inputs_time_format->getDev());
+    g_convert_spiketimes<<<dim3(batch, endTime), min(1024, inputSize)>>>(inputs_time->getDev(), endTime, inputSize, inputs_time->cols, inputs_time->channels, batch, inputs_time_format->getDev());
     // convert (batch, inputDim2, amount) to (batch, amount*inputDim2, 1)
     g_convert_firecounts<<<dim3(batch), min(1024, inputSize)>>>(preFireCount->getDev(), preFireCount->getArea(), inputSize, preFireCount->cols, preFireCount->channels, batch, preFireCount_format->getDev());
 
@@ -1691,7 +1691,7 @@ __global__ void g_Spiking_synaptic_effect(
 
     int* input_time       = inputs_time + batchId * inputSize2;
     int* output_time      = outputs_time + batchId * outputSize2;
-    int* input_fireCount  = batchPreFireCount + batchId * outputSize;
+    int* input_fireCount  = batchPreFireCount + batchId * inputSize;
     int* output_fireCount = batchFireCount + batchId * outputSize;
     float* acc_effect     = batchAccEffect + batchId * wSize;
 
