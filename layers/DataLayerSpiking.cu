@@ -177,8 +177,8 @@ void DataLayerSpiking::feedforward(){
 		outputs->getDev(),
 		outputs->getArea(),
         outputs->cols);
-	checkCudaErrors(cudaStreamSynchronize(0));
-	getLastCudaError("DataLayerSpiking:feedforward");
+	//checkCudaErrors(cudaStreamSynchronize(0));
+	//getLastCudaError("DataLayerSpiking:feedforward");
 
     //* get the fire counts for transforming the binary response to spike times    
     thread = dim3(min(outputSize, 1024));
@@ -187,8 +187,8 @@ void DataLayerSpiking::feedforward(){
         fireCount->getDev(),
         outputSize,
         endTime);
-	checkCudaErrors(cudaStreamSynchronize(0));
-	getLastCudaError("DataLayerSpiking:g_DataLayerSpiking_get_fireCount");
+	//checkCudaErrors(cudaStreamSynchronize(0));
+	//getLastCudaError("DataLayerSpiking:g_DataLayerSpiking_get_fireCount");
     
 
     g_response_2_spiketime<<<block, thread>>>(
@@ -197,8 +197,8 @@ void DataLayerSpiking::feedforward(){
         outputs->getArea(),
         outputSize,
         endTime);
-    checkCudaErrors(cudaStreamSynchronize(0));
-	getLastCudaError("DataLayerSpiking:g_response_2_spiketime");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+	//getLastCudaError("DataLayerSpiking:g_response_2_spiketime");
 
 }; 
 

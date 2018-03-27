@@ -104,6 +104,7 @@ public:
     void initBiasFromDumpfile(const std::string& filename, cuMatrix<float>*& cuW);
     void initFromDumpfile(const std::string& filename, cuMatrix<float>*& cuW);
 	void save(FILE* file);
+    void saveTauRes(FILE* file);
 
     cuMatrix<int>* getFireCount(){
         return fireCount;

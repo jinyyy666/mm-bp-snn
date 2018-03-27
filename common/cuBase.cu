@@ -75,9 +75,7 @@ __device__ float d_Spiking_accumulate_effect(
         
         int ub = t_post;
         int lb = max(1, int(t_post - 4*TAU_M));
-        int u = ub == 1 ? 0 : d_binary_search(ub, input_time + i_idx * endTime, n_ispikes);
-        int l = lb == 1 ? 0 : d_binary_search(lb, input_time + i_idx * endTime, n_ispikes);
-        for(int j = l; j <= u; ++j){
+        for(int j = 0; j < n_ispikes; ++j){
             int t_pre = input_time[i_idx * endTime + j];
             if(t_pre < lb || t_pre >= ub)    continue;
 
@@ -523,18 +521,14 @@ __global__ void g_convert(float* cuPool, float*cuPoolToFlActi, int batch, int si
 * blocks  : dim3(batch, endTime)
 * threads : dim3(min(1024, inputSize))
 */
-__global__ void g_convert_spiketimes(int* inputs_time, int* fireCounts, int fireArea, int endTime, int inputSize, int inputCols, int channels, int batch, int* inputs_tf){
+__global__ void g_convert_spiketimes(int* inputs_time, int endTime, int inputSize, int inputCols, int channels, int batch, int* inputs_tf){
     int b = blockIdx.x;
     int t = blockIdx.y;
-    int inputDim2 = inputCols / endTime;
     for(int i = 0; i < inputSize; i += blockDim.x){
         int i_idx = i + threadIdx.x;
         if(i_idx < inputSize){
             int s = i_idx / channels;
             int c = i_idx % channels;
-            int f_cnt = fireCounts[c * fireArea + b * inputDim2 + s];
-            if(t >= f_cnt)
-                return;
             int index = c * batch * inputCols + b * inputCols + s*endTime + t;
             inputs_tf[b * inputCols * channels + c*inputCols + s*endTime+ t] = inputs_time[index];
         }
@@ -688,8 +682,8 @@ __global__ void g_intrinsic_plasticity(int * batchFireCount, float* tauTmp, floa
                 continue;
             }
     
-            float x = vth / (__expf(1/y - T_REFRAC) - 1);
             float t = tau[o_idx];
+            float x = vth / (__expf(1/t * (1/y - T_REFRAC)) - 1);
             float r = res[o_idx];
             taugrad[o_idx] = (1/u * (T_REFRAC * y * y - y) - (2 * T_REFRAC * y - 1)) / t;
             resgrad[o_idx] = ((y * y / u - 2 * y) * t * vth + x + vth) / (r * x);
@@ -758,11 +752,12 @@ __global__ void g_intrinsic_plasticity_update(float* taugrad, float* resgrad, fl
         {
             tau[id] -= lr * taugrad[id];
             res[id] -= lr * resgrad[id];
+
+            if(tau[id] < 32)    tau[id] = 32;
+            if(tau[id] > 1024)  tau[id] = 1024;
+            if(res[id] < 32)    res[id] = 32;
+            if(res[id] > 1024)  res[id] = 1024;
         }
-        if(tau[id] < 32)    tau[id] = 32;
-        if(tau[id] > 1024)  tau[id] = 1024;
-        if(res[id] < 32)    res[id] = 32;
-        if(res[id] > 1024)  res[id] = 1024;
     }
 }
 

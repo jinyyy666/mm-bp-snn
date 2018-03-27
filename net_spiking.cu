@@ -40,6 +40,16 @@ void cuSaveSpikingNet()
     fclose(pOut);
 };
 
+void cuSaveTauRes()
+{	
+    FILE *pOut = fopen("Result/timeConstants.txt", "w");
+    for(int i = 0; i < (int)spiking_que.size(); i++){
+        SpikingLayerBase* layer = (SpikingLayerBase*) Layers::instance()->get(spiking_que[i]->m_name);
+        layer->saveTauRes(pOut);
+    }
+    fclose(pOut);
+};
+
 void cuFreeSpikingNet()
 {
 }
@@ -201,7 +211,7 @@ void outputPredict(int* vote, int start)
                     Layers::instance()->get(spiking_que[i]->m_name)->getFireCount()->cols,
                     start,
                     vote);
-            cudaStreamSynchronize(0);
+            //cudaStreamSynchronize(0);
             getLastCudaError("g_getPredict");
         }
         if(spiking_que[i]->m_type == std::string("SOFTMAXSPIKING")){
@@ -210,7 +220,7 @@ void outputPredict(int* vote, int start)
 				Layers::instance()->get(spiking_que[i]->m_name)->getOutputs()->cols,
 				start,
 				vote);
-			cudaStreamSynchronize(0);
+			//cudaStreamSynchronize(0);
             getLastCudaError("g_getPredict_softmax");
 		}
     }
@@ -416,7 +426,7 @@ void pretrainNetwork(cuMatrixVector<bool>& x, int batch)
             start = (int)x.size() - batch;
         }
         networkPretrain(k * batch - start);
-        printf("\b\b\b\b\b\b\b\b\b");
+        printf("\b\b\b\b\b\b\b\b\b\b\b\b");
     }
 }
 
@@ -464,9 +474,10 @@ void predictTestRate(cuMatrixVector<bool>&x,
             cuSPredictions->getDev(),
             testX.size(),
             nclasses);
-    cudaStreamSynchronize(0);
+    //cudaStreamSynchronize(0);
     getLastCudaError("g_getSpikeVotingResult");
     cuSCorrect->toCpu();
+    cuSaveTauRes();
     if (cuSCorrect->get(0, 0, 0) > cuSCurCorrect) {
         cuSCurCorrect = cuSCorrect->get(0, 0, 0);
         cuSaveSpikingNet();
@@ -531,8 +542,29 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
     sprintf(logStr, "correct is %d\n", cuSCorrect->get(0,0,0));
     LOG(logStr, "Result/log.txt");
 
-    //pretrainNetwork(x, batch);
+    pretrainNetwork(x, batch);
 
+    my_start = (float)clock();
+    predictTestRate(x, y, testX, testY, batch, nclasses, handle);
+    my_end = (float)clock();
+    sprintf(logStr, "===================output fire counts================\n");
+    LOG(logStr, "Result/log.txt");
+    testY->toCpu();
+    sprintf(logStr, "The last sample label: %d\n", testY->get(testY->getLen() - batch, 0, 0));
+    LOG(logStr, "Result/log.txt");
+
+    for(int i = 0; i < (int)spiking_que.size(); i++){
+        SpikingLayerBase* layer = (SpikingLayerBase*) Layers::instance()->get(spiking_que[i]->m_name);
+        layer->printFireCount();
+    }
+
+    sprintf(logStr, "time spent on test : time=%.03lfs\n", (float) (my_end - my_start) / CLOCKS_PER_SEC);
+    LOG(logStr, "Result/log.txt");
+ 
+    sprintf(logStr, "after pretrain, correct is %d\n", cuSCorrect->get(0,0,0));
+    LOG(logStr, "Result/log.txt");
+
+    
     int epochs = Config::instance()->getTestEpoch();
 
     float lrate = 0.05f;
@@ -602,7 +634,7 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
                 cuSTrPredictions->getDev(),
                 x.size(),
                 nclasses);
-        cudaStreamSynchronize(0);
+        //cudaStreamSynchronize(0);
         getLastCudaError("g_getSpikeVotingResult");
         cuSTrCorrect->toCpu();
 
@@ -616,7 +648,7 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
                 y->getDev(), 
                 x.size(), 
                 nclasses);
-            cudaStreamSynchronize(0);
+            //cudaStreamSynchronize(0);
             getLastCudaError("g_getSpikeVotingResult");
             cuSampleWeight->toCpu();
         }

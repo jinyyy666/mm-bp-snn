@@ -66,6 +66,7 @@ public:
     virtual void setSampleWeight(float* s_weights) = 0;
     virtual void verify(const std::string& phrase) = 0;
     virtual void intrinsicPlasticity() = 0;
+    virtual void saveTauRes(FILE* pout){};
 	int inputDim;
 	int outputDim;
     int endTime;

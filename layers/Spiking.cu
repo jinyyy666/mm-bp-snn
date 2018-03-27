@@ -103,7 +103,8 @@ __global__ void g_getDelta_output(
     int*   fireCount,
     float* groundTruth,
     int    len,
-    float  MARGIN);
+    float  MARGIN,
+    float  DESIRED_LEVEL);
   
 /*
  * dim3 block = dim3(batch);
@@ -207,24 +208,27 @@ void Spiking::calCost()
             UNDESIRED_LEVEL,
             DESIRED_LEVEL,
             MARGIN);
-    cudaStreamSynchronize(0);
-    getLastCudaError("Spiking:g_getCost_output");
+    //cudaStreamSynchronize(0);
+    //getLastCudaError("Spiking:g_getCost_output");
 }
 
 void Spiking::intrinsicPlasticity()
 {
+    if(m_name == std::string("output"))
+        return;
+
     int thread = min(1024, outputSize);
     int block  = batch;
-    int u = 0.2;
+    float u = 0.2;
     g_intrinsic_plasticity<<<block, thread>>>(fireCount->getDev(), taugradTmp->getDev(), resgradTmp->getDev(), tau->getDev(), res->getDev(), endTime, tau->getArea(), outputSize, T_REFRAC, threshold, u);
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("Spiking::g_intrinsic_plasticity");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("Spiking::g_intrinsic_plasticity");
 
     block  = outputSize;
     thread = batch;
     g_intrinsic_plasticity_gradadd<<<block, thread, 2 * sizeof(float) * batch>>>(taugradTmp->getDev(), taugrad->getDev(), resgradTmp->getDev(), resgrad->getDev(), batch, taugradTmp->getArea(), outputSize);
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("Spiking::g_intrinsic_plasticity_add");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("Spiking::g_intrinsic_plasticity_add");
 
 
     block = min((tau->getLen() + 255)/ 256, 5120);
@@ -236,8 +240,8 @@ void Spiking::intrinsicPlasticity()
         res->getDev(),
         tau->getLen(),
         0.5);
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("Spiking::g_intrinsic_plasticity");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("Spiking::g_intrinsic_plasticity");
 
 }
 
@@ -255,7 +259,7 @@ void Spiking::feedforward()
     g_transform_2_batch<<<dim3(batch, outputSize), min(1024, endTime)>>>(inputs_resp_tmp->getDev(), endTime, outputSize, batch, inputs_resp->getDev());
 
     // convert (batch, inputDim2*endTime, amount) to (batch, amount*inputDim2*endTime, 1)
-    g_convert_spiketimes<<<dim3(batch, endTime), min(1024, inputSize)>>>(inputs_time->getDev(), preFireCount->getDev(), preFireCount->getArea(), endTime, inputSize, inputs_time->cols, inputs_time->channels, batch, inputs_time_format->getDev());
+    g_convert_spiketimes<<<dim3(batch, endTime), min(1024, inputSize)>>>(inputs_time->getDev(), endTime, inputSize, inputs_time->cols, inputs_time->channels, batch, inputs_time_format->getDev());
     // convert (batch, inputDim2, amount) to (batch, amount*inputDim2, 1)
     g_convert_firecounts<<<dim3(batch), min(1024, inputSize)>>>(preFireCount->getDev(), preFireCount->getArea(), inputSize, preFireCount->cols, preFireCount->channels, batch, preFireCount_format->getDev());
 
@@ -280,8 +284,8 @@ void Spiking::feedforward()
             tau->getDev(),
             res->getDev(),
             TAU_S);
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("Spiking::g_Spiking_feedforward");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("Spiking::g_Spiking_feedforward");
 
     block = dim3(batch, 1);
     thread = dim3(min(outputSize, 1024));
@@ -293,8 +297,8 @@ void Spiking::feedforward()
             outputs->getArea(),
             outputSize,
             endTime);
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("Spiking:g_response_2_spiketime");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("Spiking:g_response_2_spiketime");
 
 }
 
@@ -303,18 +307,18 @@ void Spiking::backpropagation()
     if(m_name == std::string("output")){
         // compute the cost function
         g_getCost_output<<<dim3(1), dim3(256), sizeof(float) * 256>>>(fireCount->getDev(), groundTruth->getDev(), cost->getDev(), predict, batch, fireCount->cols, UNDESIRED_LEVEL, DESIRED_LEVEL, MARGIN);
-        cudaStreamSynchronize(0);
-        getLastCudaError("Spiking::g_getCost_output");
+        //cudaStreamSynchronize(0);
+        //getLastCudaError("Spiking::g_getCost_output");
 
         // compute the delta (error)
-        g_getDelta_output<<<dim3(1), dim3(256)>>>(curDelta->getDev(), fireCount->getDev(), groundTruth->getDev(), curDelta->getLen(), MARGIN);
-        cudaStreamSynchronize(0);
-        getLastCudaError("Spiking::g_getDelta_output");
+        g_getDelta_output<<<dim3(1), dim3(256)>>>(curDelta->getDev(), fireCount->getDev(), groundTruth->getDev(), curDelta->getLen(), MARGIN, DESIRED_LEVEL);
+        //cudaStreamSynchronize(0);
+        //getLastCudaError("Spiking::g_getDelta_output");
 
         // apply the sample weights
         g_boostWeight_output<<<dim3(batch), dim3(outputSize)>>>(curDelta->getDev(), sample_weights, curDelta->getLen());
-        cudaStreamSynchronize(0);
-        getLastCudaError("Spiking::g_boostWeight_output");
+        //cudaStreamSynchronize(0);
+        //getLastCudaError("Spiking::g_boostWeight_output");
 
         // compute the lateral factors if applicable
         if(lateralFactor != NULL && w_laterial != NULL){
@@ -331,15 +335,15 @@ void Spiking::backpropagation()
                 T_REFRAC,
                 TAU_M,
                 TAU_S);
-            cudaStreamSynchronize(0);
-            getLastCudaError("Spiking::g_getLateralFactor_output");
+            //cudaStreamSynchronize(0);
+            //getLastCudaError("Spiking::g_getLateralFactor_output");
         }
 
         // modify the output spikes of the target neuron if it does not fire
         // tricky: modify both the spike trains and output fire counts!
         g_modifySpikes<<<dim3(batch), dim3(min(outputSize, 1024))>>>(outputs->getDev(), predict, fireCount->getDev(), DESIRED_LEVEL, endTime, outputSize);
-        cudaStreamSynchronize(0);
-        getLastCudaError("Spiking::g_modifySpikes");
+        //cudaStreamSynchronize(0);
+        //getLastCudaError("Spiking::g_modifySpikes");
 
         // retransform the binary matrix to the spike times since the outputs might be changed
         g_response_2_spiketime<<<dim3(batch, 1), dim3(min(outputSize, 1024))>>>(
@@ -348,8 +352,8 @@ void Spiking::backpropagation()
                 outputs->getArea(),
                 outputSize,
                 endTime);
-        checkCudaErrors(cudaStreamSynchronize(0));
-        getLastCudaError("Spiking:g_response_2_spiketime");
+        //checkCudaErrors(cudaStreamSynchronize(0));
+        //getLastCudaError("Spiking:g_response_2_spiketime");
     }
     // pre compute the accumulative synaptic effect, and effect ratio (if applicable)
     dim3 thread = dim3(min(1024, outputSize));
@@ -369,15 +373,15 @@ void Spiking::backpropagation()
         T_REFRAC,
         TAU_M,
         TAU_S);
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("g_Spiking_synaptic_effect");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("g_Spiking_synaptic_effect");
    
     // divide the curDelta by vth
     block = dim3(batch, 1);
     thread = dim3(min(1024, outputSize));
     g_divide_by_threshold<<<block, thread>>>(curDelta->getDev(), curDelta->getArea(), curDelta->cols, threshold);
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("g_divide_by_threshold");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("g_divide_by_threshold");
    
     // compute preDelta: curDelta: batch * outputSize; w: outputSize * inputSize
     if(preDelta == NULL){
@@ -396,8 +400,8 @@ void Spiking::backpropagation()
         thread = min(512, preDelta->channels * preDelta->cols);
         g_preDeltaFormat<<<block, thread>>>(preDelta_format->getDev(), preDelta->getDev(),
             preDelta->rows, preDelta->cols, preDelta->channels);
-        cudaStreamSynchronize(0);
-        getLastCudaError("g_preDeltaFormat");
+        //cudaStreamSynchronize(0);
+        //getLastCudaError("g_preDeltaFormat");
     } 
 }
 
@@ -508,13 +512,13 @@ void Spiking::getGrad()
         inputSize,
         outputSize);
 
-    checkCudaErrors(cudaStreamSynchronize(0));
-	getLastCudaError("g_Spiking_wgrad_spiketime");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+	//getLastCudaError("g_Spiking_wgrad_spiketime");
 
 #ifdef DEBUG
     g_Spiking_debug_spiketime<<<block, thread>>>(inputs_time->getDev(), outputs_time->getDev(), preFireCount->getDev(), fireCount->getDev(), inputSize, outputSize, endTime);
-    checkCudaErrors(cudaStreamSynchronize(0));
-	getLastCudaError("g_Spiking_debug_spiketime");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+	//getLastCudaError("g_Spiking_debug_spiketime");
 #endif
     
     block = dim3(outputSize);
@@ -526,8 +530,8 @@ void Spiking::getGrad()
         outputSize,
         inputSize,
         weightLimit);
-    checkCudaErrors(cudaStreamSynchronize(0));    
-	getLastCudaError("g_Spiking_calSquareSum");
+    //checkCudaErrors(cudaStreamSynchronize(0));    
+	//getLastCudaError("g_Spiking_calSquareSum");
  
 	block  = dim3(outputSize * inputSize);
 	thread = dim3(batch);
@@ -544,8 +548,8 @@ void Spiking::getGrad()
         inputSize,
 		w->getArea());
 
-	checkCudaErrors(cudaStreamSynchronize(0));
-	getLastCudaError("g_Spiking_gradAdd");
+	//checkCudaErrors(cudaStreamSynchronize(0));
+	//getLastCudaError("g_Spiking_gradAdd");
     
     // add the bias derivation here:
 }	
@@ -706,6 +710,29 @@ Spiking::Spiking(std::string name)
         this->loadRef(); // for verification purpose
 
     Layers::instance()->set(m_name, this);
+}
+
+void Spiking::saveTauRes(FILE* file)
+{
+    tau->toCpu();
+    int len = tau->getLen();
+    fprintf(file, "The tau in %s: ", m_name.c_str());
+    for(int c = 0; c < tau->channels; ++c)
+        for(int i = 0; i < tau->rows; ++i)
+            for(int j = 0; j < tau->cols; ++j)
+                fprintf(file, "%f ", tau->get(i, j, c));
+
+    fprintf(file, "\n");
+
+    res->toCpu();
+    len = res->getLen();
+    fprintf(file, "The res in %s: ", m_name.c_str());
+    for(int c = 0; c < res->channels; ++c)
+        for(int i = 0; i < res->rows; ++i)
+            for(int j = 0; j < res->cols; ++j)
+                fprintf(file, "%f ", res->get(i, j, c));
+
+    fprintf(file, "\n");
 }
 
 void Spiking::save(FILE* file)
@@ -1308,7 +1335,7 @@ __global__ void g_getCost_output(
  * dim3 block = dim3(1);
  * dim3 thread= dim3(256);
  */
-__global__ void g_getDelta_output(float* outputDelta, int* fireCount, float* groundTruth, int len, float MARGIN)
+__global__ void g_getDelta_output(float* outputDelta, int* fireCount, float* groundTruth, int len, float MARGIN, float DESIRED_LEVEL)
 {
     for(int i = 0; i < len; i += blockDim.x)
     {
@@ -1316,7 +1343,7 @@ __global__ void g_getDelta_output(float* outputDelta, int* fireCount, float* gro
         if(id < len)
         {
             float diff = fabsf(float(fireCount[id]) - groundTruth[id]);
-            outputDelta[id] = diff > MARGIN ? fireCount[id] - groundTruth[id] : 0;
+            outputDelta[id] = diff > MARGIN ? (fireCount[id] - groundTruth[id]) / DESIRED_LEVEL : 0;
         }
     }
 }
