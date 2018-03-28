@@ -709,7 +709,7 @@ __device__ float d_ConvSpiking_accumulate_spikes(
                 int yy = y + j - padding;
                 if(xx >= 0 && xx < inputDim && yy >= 0 && yy < inputDim){
                     int i_idx = xx * inputDim + yy;
-                    response += curInput[i_idx + t * inputSize2] ?  w[i * kernelSize + j] : 0;
+                    response += curInput[i_idx + t * inputSize2] * w[i * kernelSize + j];
                 }
             }
         }
