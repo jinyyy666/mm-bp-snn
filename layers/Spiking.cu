@@ -131,17 +131,28 @@ __global__ void g_Spiking_wgrad(
         float TAU_S);
 
 /*
- * dim3 block = dim3(batch, inputSize);
- * dim3 thread= min(1024, outputSize);
+ * dim3 block = dim3(batch, outputSize);
+ * dim3 thread= min(1024, inputSize);
  */
-__global__ void g_Spiking_wgrad_spiketime(
+__global__ void g_Spiking_wgrad_sideEffect(
         float* weights,
         int* batchFireCount,
+        float* batchAccEffect,
+        float  vth,
+        int inputSize,
+        int outputSize,
+        float * batchSideEffect);
+
+/*
+ * dim3 block = dim3(batch, outputSize);
+ * dim3 thread= min(1024, inputSize);
+ */
+__global__ void g_Spiking_wgrad_spiketime(
+        float* batchSideEffect,
         float* batchAccEffect,
         float* curDelta,
         float* latFactor,
         float* wgradTmp,
-        float  vth,
         int inputSize,
         int outputSize);
 
@@ -349,7 +360,7 @@ void Spiking::backpropagation()
     g_divide_by_threshold<<<block, thread>>>(curDelta->getDev(), curDelta->getArea(), curDelta->cols, threshold);
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("g_divide_by_threshold");
-   
+    
     // compute preDelta: curDelta: batch * outputSize; w: outputSize * inputSize
     if(preDelta == NULL){
         ConfigSpiking* config = (ConfigSpiking*)Config::instance()->getLayerByName(m_name);
@@ -468,17 +479,26 @@ __global__ void g_Spiking_gradAdd(
 void Spiking::getGrad()
 {
     dim3 thread = dim3(min(1024, inputSize));
-    dim3 block  = dim3(batch, inputSize, outputSize);
-    cudaFuncSetCacheConfig(g_Spiking_wgrad_spiketime,cudaFuncCachePreferL1);
-
-    g_Spiking_wgrad_spiketime<<<block, thread, sizeof(float) * min(1024, inputSize)>>>(
+    dim3 block  = dim3(batch, outputSize);
+    g_Spiking_wgrad_sideEffect<<<block, thread, sizeof(float) * min(1024, inputSize)>>>(
         w->getDev(),
         fireCount->getDev(),
+        accEffect->getDev(),
+        threshold,
+        inputSize,
+        outputSize,
+        sideEffect->getDev());
+    checkCudaErrors(cudaStreamSynchronize(0));
+	getLastCudaError("g_Spiking_wgrad_sideEffect");
+   
+    cudaFuncSetCacheConfig(g_Spiking_wgrad_spiketime,cudaFuncCachePreferL1);
+
+    g_Spiking_wgrad_spiketime<<<block, thread>>>(
+        sideEffect->getDev(),
         accEffect->getDev(),
         curDelta->getDev(),
         lateralFactor == NULL ? NULL : lateralFactor->getDev(),
         wgradTmp->getDev(),
-        threshold,
         inputSize,
         outputSize);
 
@@ -602,6 +622,7 @@ Spiking::Spiking(std::string name)
     weightSqSum = new cuMatrix<float>(outputSize, 1, 1);
     maxCount    = new cuMatrix<int>(batch, 1, 1);
     accEffect   = new cuMatrix<float>(batch, outputSize * inputSize, 1); 
+    sideEffect  = new cuMatrix<float>(batch, outputSize, 1);
 
     predict = NULL;
 
@@ -1559,45 +1580,40 @@ __global__ void g_Spiking_wgrad(
 }
 
 /*
- * dim3 block = dim3(batch, inputSize, outputSize);
+ * dim3 block = dim3(batch, outputSize);
  * dim3 thread= min(1024, inputSize);
  */
-__global__ void g_Spiking_wgrad_spiketime(
+__global__ void g_Spiking_wgrad_sideEffect(
         float* weights,
         int* batchFireCount,
         float* batchAccEffect,
-        float* curDelta,
-        float* latFactor,
-        float* wgradTmp,
         float  vth,
         int inputSize,
-        int outputSize)
+        int outputSize,
+        float * batchSideEffect)
 {
     int batchId = blockIdx.x;
-    int i_idx   = blockIdx.y;
-    int o_idx   = blockIdx.z;
+    int o_idx = blockIdx.y;
     int tid     = threadIdx.x;
     extern __shared__ float _sum[];
     _sum[tid] = 0;
     __syncthreads();
 
     int wSize        = outputSize * inputSize;
-    int curDeltaSize = outputSize;
-
-    float* wgrad  = wgradTmp + batchId * wSize;
-    int* fireCount = batchFireCount + batchId * outputSize;
-    float* acc_effect     = batchAccEffect + batchId * wSize;
-    float* cDelta = curDelta + batchId * curDeltaSize;
-    float* lFactor = latFactor == NULL ? NULL : latFactor + batchId * curDeltaSize;
+    int* fireCount   = batchFireCount + batchId * outputSize;
+    float* acc_effect= batchAccEffect + batchId * wSize;
+    float* side_effect = batchSideEffect + batchId * outputSize;
+    int o_cnt = fireCount[o_idx];
 
     for(int i = 0; i < inputSize; i += blockDim.x)
     {
         int idx = i + tid;
         if(idx < inputSize)
         {
-            float w = idx == i_idx ? 1 : weights[idx + o_idx * inputSize];
+            float w = weights[idx + o_idx * inputSize];
             float e = acc_effect[idx + o_idx * inputSize];
-            _sum[tid] += w*e;
+            float ratio = o_cnt == 0 ? 0.5 : e/o_cnt;
+            _sum[tid] += w * ratio;
         }
     }
     int len = blockDim.x;
@@ -1611,15 +1627,51 @@ __global__ void g_Spiking_wgrad_spiketime(
         }
         len = skip;
     }
-    if(tid == 0)
-    {
-        float latFac = lFactor == NULL ? 1.0f : lFactor[o_idx];
-        int o_cnt = fireCount[o_idx];
-        float acc = acc_effect[i_idx + o_idx * inputSize];
-        float sec_term = o_cnt == 0 ? acc : acc/(o_cnt * vth) * _sum[0];
-        float delta_w = cDelta[o_idx] * sec_term * latFac;
+    if(tid == 0){
+        side_effect[o_idx] = _sum[0]/vth;
+    }
+}
 
-        wgrad[i_idx + o_idx * inputSize] = delta_w;
+
+/*
+ * dim3 block = dim3(batch, outputSize);
+ * dim3 thread= min(1024, inputSize);
+ */
+__global__ void g_Spiking_wgrad_spiketime(
+        float* batchSideEffect,
+        float* batchAccEffect,
+        float* curDelta,
+        float* latFactor,
+        float* wgradTmp,
+        int inputSize,
+        int outputSize)
+{
+    int batchId = blockIdx.x;
+    int o_idx   = blockIdx.y;
+    int tid     = threadIdx.x;
+    
+    int wSize        = outputSize * inputSize;
+    int curDeltaSize = outputSize;
+
+    float* wgrad  = wgradTmp + batchId * wSize;
+    float* acc_effect     = batchAccEffect + batchId * wSize;
+    float* side_effect = batchSideEffect + batchId * outputSize;
+    float* cDelta = curDelta + batchId * curDeltaSize;
+    float* lFactor = latFactor == NULL ? NULL : latFactor + batchId * curDeltaSize;
+
+    float s_effect = side_effect[o_idx];
+    float latFac = lFactor == NULL ? 1.0f : lFactor[o_idx];
+    float delta = cDelta[o_idx];
+    for(int i = 0; i < inputSize; i += blockDim.x)
+    {
+        int i_idx = i + tid;
+        if(i_idx < inputSize)
+        {
+            float compen_effect = acc_effect[i_idx + o_idx * inputSize] * (1 + s_effect);
+            float delta_w = delta * compen_effect * latFac;
+
+            wgrad[i_idx + o_idx * inputSize] = delta_w;
+        }
     }
 }
 

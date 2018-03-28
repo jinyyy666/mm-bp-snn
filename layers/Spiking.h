@@ -59,6 +59,7 @@ public:
         delete preFireCount_format;
         delete fireCount;
         delete accEffect;
+        delete sideEffect;
         delete weightSqSum;
         delete lateralFactor;
         delete effectRatio;
@@ -174,6 +175,7 @@ protected:
     cuMatrix<int>*   preFireCount;
     cuMatrix<int>*   preFireCount_format; //preFireCount(batch, size, channel)->(batch, size*channel)
     cuMatrix<float>* accEffect;
+    cuMatrix<float>* sideEffect;
 
     cuMatrix<float>* weightSqSum;
     cuMatrix<float>* lateralFactor;
