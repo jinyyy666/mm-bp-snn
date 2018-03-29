@@ -71,6 +71,31 @@ __global__ void g_ConvSpiking_backpropagation(
         float   TAU_S);
 
 /*
+ * dim3 block = dim3(batch, outputDim2, outputAmount);
+ * dim3 thread= min(kernelSize2*inputAmount, 512);
+ */
+__global__ void g_ConvSpiking_wgrad_sideEffect(
+        int*    _inputs_time,
+        int*    _outputs_time,
+        int*    batchPreFireCount,
+        int*    batchFireCount,
+        float** ws,
+        float   vth,
+        float*  batchSideEffect,
+        int     inputDim,
+        int     outputDim,
+        int     endTime,
+        int     kernelSize,
+        int     padding,
+        int     inputAmount,
+        int     inputArea,
+        int     outputArea,
+        int     T_REFRAC,
+        float   TAU_M,
+        float   TAU_S);
+
+
+/*
  * dim3 block = dim3(batch, outputAmount*inputAmount, kernelSize * kernelSize);
  * dim3 thread= min(outputDim * outputDim, 512);
  */
@@ -79,6 +104,7 @@ __global__ void g_ConvSpiking_wgrad(
         int*    _outputs_time,
         int*    batchPreFireCount,
         int*    batchFireCount,
+        float*  batchSideEffect,
         float*  _curDelta,
         float** wgradTmp,
         int     inputDim,
@@ -327,9 +353,37 @@ __global__ void g_ConvSpiking_calSquareSum(
 
 void ConvSpiking::getGrad()
 {
-    dim3 block    = dim3(batch, outputAmount * inputAmount, kernelSize * kernelSize);
-    int n_threads = min(outputDim * outputDim, 512);
-    dim3 thread   = n_threads;
+    int outputDim2 = outputDim * outputDim;
+    int kernelSize2 = kernelSize * kernelSize;
+    int n_threads = min(512, kernelSize2 * inputAmount);
+    
+    dim3 block = dim3(batch, outputDim2, outputAmount);
+    dim3 thread = n_threads;
+    g_ConvSpiking_wgrad_sideEffect<<<block, thread, sizeof(float)*n_threads>>>(
+        inputs_time->getDev(),
+        outputs_time->getDev(),
+        preFireCount->getDev(),
+        fireCount->getDev(),
+        w.m_devPoint,
+        threshold,
+        sideEffect->getDev(),
+        inputDim,
+        outputDim,
+        endTime,
+        kernelSize,
+        padding,
+        inputAmount,
+        inputs->getArea(),
+        outputs->getArea(),
+        T_REFRAC,
+        TAU_M,
+        TAU_S);
+    checkCudaErrors(cudaStreamSynchronize(0));
+    getLastCudaError("g_ConvSpiking_wgrad_sideEffect");
+
+    block    = dim3(batch, outputAmount * inputAmount, kernelSize2);
+    n_threads = min(outputDim2, 512);
+    thread   = n_threads;
     cudaFuncSetCacheConfig(g_ConvSpiking_wgrad,cudaFuncCachePreferL1);
 
     g_ConvSpiking_wgrad<<<block, thread, sizeof(float)*n_threads>>>(
@@ -337,6 +391,7 @@ void ConvSpiking::getGrad()
         outputs_time->getDev(),
         preFireCount->getDev(),
         fireCount->getDev(),
+        sideEffect->getDev(), 
         curDelta->getDev(),
         wgradTmp.m_devPoint,
         inputDim,
@@ -454,6 +509,7 @@ ConvSpiking::ConvSpiking(std::string name)
 	curDelta = new cuMatrix<float>(batch, outputDim * outputDim, outputAmount);
     fireCount= new cuMatrix<int>(batch, outputDim * outputDim, outputAmount);
     weightSqSum = new cuMatrix<float>(outputAmount, 1, 1);
+    sideEffect = new cuMatrix<float>(batch, outputDim * outputDim, outputAmount);
 
 	for(int i = 0; i < outputAmount; i++){
 		w.push_back(new cuMatrix<float>(kernelSize, kernelSize, inputAmount));
@@ -909,6 +965,92 @@ __global__ void g_ConvSpiking_backpropagation(
         preDelta[i_idx] = _sum[0];
 }
 
+/*
+ * dim3 block = dim3(batch, outputDim2, outputAmount);
+ * dim3 thread= min(kernelSize2*inputAmount, 512);
+ */
+__global__ void g_ConvSpiking_wgrad_sideEffect(
+        int*    _inputs_time,
+        int*    _outputs_time,
+        int*    batchPreFireCount,
+        int*    batchFireCount,
+        float** ws,
+        float   vth,
+        float*  batchSideEffect,
+        int     inputDim,
+        int     outputDim,
+        int     endTime,
+        int     kernelSize,
+        int     padding,
+        int     inputAmount,
+        int     inputArea,
+        int     outputArea,
+        int     T_REFRAC,
+        float   TAU_M,
+        float   TAU_S)
+{
+    extern __shared__ float _sum[];
+    int tid = threadIdx.x;
+    _sum[tid] = 0;
+    __syncthreads();
+
+    int batchId = blockIdx.x;
+    int o_idx = blockIdx.y;
+    int ok = blockIdx.z;
+
+    int inputSize2    = inputDim * inputDim;
+    int outputSize2   = outputDim * outputDim;
+    int kernelSize2   = kernelSize * kernelSize;
+
+    int* output_time   = _outputs_time + outputArea * ok + batchId * outputSize2 * endTime;
+    int* output_fireCount = batchFireCount + ok * outputArea / endTime + batchId * outputSize2;
+    float* side_effect = batchSideEffect  + ok * outputArea / endTime + batchId * outputSize2;
+    
+    int o_cnt = output_fireCount[o_idx];
+    int len = kernelSize2*inputAmount;
+    for(int tidx = 0; tidx < len; tidx += blockDim.x)
+    {
+        int idx = tidx + threadIdx.x;
+        if(idx < len){
+            int ik = idx / kernelSize2;
+            float* w = ws[ok] + ik * kernelSize2;
+            int* input_time = _inputs_time + inputArea * ik + batchId * inputSize2 * endTime;
+            int* input_fireCount= batchPreFireCount + ik * inputArea / endTime + batchId * inputSize2;
+
+            int k_id = idx % kernelSize2;
+            int i = k_id / kernelSize;
+            int j = k_id % kernelSize;
+
+            int x = o_idx / outputDim;
+            int y = o_idx % outputDim;
+
+            int xx = x + i - padding;
+            int yy = y + j - padding;
+            if(xx >= 0 && xx < inputDim && yy >= 0 && yy < inputDim){
+                int i_idx = xx * inputDim + yy;
+                float e = d_Spiking_accumulate_effect(output_time, input_time, o_cnt, input_fireCount[i_idx], o_idx, i_idx, outputSize2, inputSize2, endTime, T_REFRAC, TAU_M, TAU_S);
+                float ratio = o_cnt == 0 ? 0.5 : e/o_cnt;
+                _sum[tid] += w[i * kernelSize + j] * ratio;
+            }
+        }
+    }
+    len = blockDim.x;
+    while(len != 1)
+    {
+        __syncthreads();
+        int skip = (len + 1) >> 1;
+        if(tid < skip && (tid + skip) < len)
+        {
+            _sum[tid] += _sum[tid + skip];
+        }
+        len = skip;
+    }
+    if(tid == 0){
+        side_effect[o_idx] = _sum[0] / vth;
+    }
+}
+
+
 
 /*
  * dim3 block = dim3(batch, outputAmount*inputAmount, kernelSize * kernelSize);
@@ -919,6 +1061,7 @@ __global__ void g_ConvSpiking_wgrad(
         int*    _outputs_time,
         int*    batchPreFireCount,
         int*    batchFireCount,
+        float*  batchSideEffect,
         float*  _curDelta,
         float** wgradTmp,
         int     inputDim,
@@ -956,13 +1099,15 @@ __global__ void g_ConvSpiking_wgrad(
     int* output_time   = _outputs_time + outputArea * ok + batchId * outputSize2 * endTime;
     int* input_fireCount  = batchPreFireCount + ik * inputArea / endTime + batchId * inputSize2;
     int* output_fireCount = batchFireCount + ok * outputArea / endTime + batchId * outputSize2;
-    float* curDelta = _curDelta + ok * curDeltaArea + batchId * curDeltaSize2;
+    float* side_effect = batchSideEffect + ok * outputArea / endTime + batchId * outputSize2;
+    float* curDelta  = _curDelta + ok * curDeltaArea + batchId * curDeltaSize2;
 
     for(int tidx = 0; tidx < outputSize2; tidx += blockDim.x)
     {
         int o_idx = tidx + threadIdx.x;
         if(o_idx < outputSize2)
         {
+            float s_effect = side_effect[o_idx];
             int i = k_id / kernelSize;
             int j = k_id % kernelSize;
            
@@ -974,7 +1119,7 @@ __global__ void g_ConvSpiking_wgrad(
             if(cx >= 0 &&  cy >= 0 && cx < inputDim && cy < inputDim){
                 int i_idx = cx * inputDim + cy;
                 float e = d_Spiking_accumulate_effect(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], o_idx, i_idx, outputSize2, inputSize2, endTime, T_REFRAC, TAU_M, TAU_S);
-                _sum[tid] += e * curDelta[x * curDeltaDim + y];
+                _sum[tid] += e * (1 + s_effect) * curDelta[x * curDeltaDim + y];
 #ifdef DEBUG
                 if(i == ROW && j == COL && ik == IN_CH && ok == OUT_CH)
                     printf("Collect x= %d; y = %d; Acc effect: %f\tdelta= %f\n", x,y,e,curDelta[x*curDeltaDim + y]);
