@@ -142,7 +142,7 @@ void ConvSpiking::calCost()
 		lambda,
 		w[0]->getLen());
 	cudaStreamSynchronize(0);
-	getLastCudaError("ConvSpiking:getCost");
+	//getLastCudaError("ConvSpiking:getCost");
 }
 
 void ConvSpiking::intrinsicPlasticity()
@@ -152,15 +152,14 @@ void ConvSpiking::intrinsicPlasticity()
     dim3 block  = dim3(batch, outputAmount);
     float u = 0.2;
     g_intrinsic_plasticity<<<block, thread>>>(fireCount->getDev(), taugradTmp->getDev(), resgradTmp->getDev(), tau->getDev(), res->getDev(), endTime, tau->getArea(), outputSize2, T_REFRAC, threshold, u);
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("ConvSpiking::g_intrinsic_plasticity");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("ConvSpiking::g_intrinsic_plasticity");
 
     block = dim3(outputSize2, outputAmount);
     thread = batch;
     g_intrinsic_plasticity_gradadd<<<block, thread, 2 * sizeof(float) * batch>>>(taugradTmp->getDev(), taugrad->getDev(), resgradTmp->getDev(), resgrad->getDev(), batch, taugradTmp->getArea(), outputSize2);
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("ConvSpiking::g_intrinsic_plasticity_add");
-
 
     block = min((tau->getLen() + 255)/ 256, 5120);
     thread = 256;
@@ -171,8 +170,8 @@ void ConvSpiking::intrinsicPlasticity()
         res->getDev(),
         tau->getLen(),
         0.5);
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("ConvSpiking::g_intrinsic_plasticity");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("ConvSpiking::g_intrinsic_plasticity");
 
 }
 
@@ -203,8 +202,8 @@ void ConvSpiking::feedforward()
         outputAmount,
         inputs->getArea(),
         inputs_resp->getArea());
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("ConvSpiking::g_ConvSpiking_fast_input_response");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("ConvSpiking::g_ConvSpiking_fast_input_response");
 
     dim3 thread= dim3(min(outputDim2, 1024), remain);
     dim3 block = dim3(batch, div);
@@ -222,8 +221,8 @@ void ConvSpiking::feedforward()
         tau->getDev(),
         res->getDev(),
         TAU_S);
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("ConvSpiking::g_ConvSpiking_feedforward");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("ConvSpiking::g_ConvSpiking_feedforward");
 
     block = dim3(batch, outputAmount);
     thread = dim3(min(outputDim2, 1024));
@@ -235,16 +234,16 @@ void ConvSpiking::feedforward()
             outputs->getArea(),
             outputDim2,
             endTime);
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("ConvSpiking:g_response_2_spiketime");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("ConvSpiking:g_response_2_spiketime");
 
 }
 
 void ConvSpiking::backpropagation()
 {	
     g_divide_by_threshold<<<dim3(batch, outputAmount), dim3(min(1024, outputDim*outputDim))>>>(curDelta->getDev(), curDelta->getArea(), curDelta->cols, threshold);
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("g_divide_by_threshold");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("g_divide_by_threshold");
     
 	if(Config::instance()->getLayerByName(m_name)->m_input == std::string("data"))
 		return;
@@ -272,8 +271,8 @@ void ConvSpiking::backpropagation()
         T_REFRAC,
         TAU_M,
         TAU_S);
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("ConvSpiking::g_ConvSpiking_backpropagation");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("ConvSpiking::g_ConvSpiking_backpropagation");
 }
 
 /*
@@ -440,8 +439,8 @@ void ConvSpiking::getGrad()
         TAU_M,
         TAU_S);
 
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("g_ConvSpiking_wgrad");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("g_ConvSpiking_wgrad");
 	
     block = dim3(outputAmount);
     thread = dim3(inputAmount);
@@ -453,8 +452,8 @@ void ConvSpiking::getGrad()
         inputAmount,
         kernelSize,
         weightLimit);
-    checkCudaErrors(cudaStreamSynchronize(0));    
-	getLastCudaError("g_ConvSpiking_calSquareSum");
+    //checkCudaErrors(cudaStreamSynchronize(0));    
+	//getLastCudaError("g_ConvSpiking_calSquareSum");
 
 	block  = dim3(outputAmount, kernelSize * kernelSize * inputAmount);
 	thread = dim3(batch);
@@ -471,8 +470,8 @@ void ConvSpiking::getGrad()
         weightLimit,
 		wgradTmp[0]->getArea(),
 		w[0]->getArea());
-	checkCudaErrors(cudaStreamSynchronize(0));
-	getLastCudaError("g_ConvSpiking_wgradAdd");
+	//checkCudaErrors(cudaStreamSynchronize(0));
+	//getLastCudaError("g_ConvSpiking_wgradAdd");
 	
 }
 
@@ -601,6 +600,29 @@ ConvSpiking::ConvSpiking(std::string name)
         this->loadRef(); // for verification purpose
 
 	Layers::instance()->set(m_name, this);
+}
+
+void ConvSpiking::saveTauRes(FILE* file)
+{
+    tau->toCpu();
+    int len = tau->getLen();
+    fprintf(file, "The tau in %s: ", m_name.c_str());
+    for(int c = 0; c < tau->channels; ++c)
+        for(int i = 0; i < tau->rows; ++i)
+            for(int j = 0; j < tau->cols; ++j)
+                fprintf(file, "%f ", tau->get(i, j, c));
+
+    fprintf(file, "\n");
+
+    res->toCpu();
+    len = res->getLen();
+    fprintf(file, "The res in %s: ", m_name.c_str());
+    for(int c = 0; c < res->channels; ++c)
+        for(int i = 0; i < res->rows; ++i)
+            for(int j = 0; j < res->cols; ++j)
+                fprintf(file, "%f ", res->get(i, j, c));
+
+    fprintf(file, "\n");
 }
 
 void ConvSpiking::save(FILE* file)

@@ -27,9 +27,9 @@
 
 //#define VERIFY
 //#define VERIFY_RESERVOIR
-//#define SPIKING_CNN
+#define SPIKING_CNN
 //#define VERIFY_SOFTMAX_SPIKING_CNN
-#define VERIFY_SPIKING_CNN
+//#define VERIFY_SPIKING_CNN
 
 void runMnist();
 void runCifar10();
@@ -526,10 +526,10 @@ void runSpikingMnist(){
     */
 	buildSpikingNetwork(trainX.size(), testX.size());
 
-    /*
-	if(cmd == 2)
-		cuReadSpikingNet("Result/checkPoint.txt");
-    */
+    
+	//if(cmd == 2)
+	cuReadSpikingNet("Result/checkPoint_cnn_current_best_rest.txt");
+    
 
 	//* learning rate
 	std::vector<float> nlrate;
@@ -541,7 +541,7 @@ void runSpikingMnist(){
 	nlrate.push_back(0.001f);   nMomentum.push_back(0.00f);  epoCount.push_back(1);
 #else
     int epochs = Config::instance()->getTestEpoch();
-    for(int i = 0; i < epochs; ++i){
+    for(int i = 105; i < epochs; ++i){
         nlrate.push_back(0.001f/sqrt(i+1)); nMomentum.push_back(0.90f);  epoCount.push_back(1);
     }
 #endif

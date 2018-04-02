@@ -80,6 +80,8 @@ public:
 		sprintf(logStr, "fire count: %d, %d, %d, %d, %d, %d, %d, %d, %d, %d;\n", fireCount->get(0,0,0), fireCount->get(0,1,0), fireCount->get(0,2,0), fireCount->get(0,3,0), fireCount->get(0,4,0), fireCount->get(0,5,0), fireCount->get(0,6,0), fireCount->get(0,7,0), fireCount->get(0,8,0), fireCount->get(0,9,0));
 		LOG(logStr, "Result/log.txt");
     }
+    
+    void saveTauRes(FILE* file);
 
 private:
 	cuMatrix<bool>*  inputs;

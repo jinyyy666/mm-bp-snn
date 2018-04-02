@@ -47,6 +47,7 @@ public:
 	void initFromCheckpoint(FILE* file);
     void initFromDumpfile(const std::string& filename, cuMatrixVector<float>& cuW);
 	void save(FILE* file);
+    void saveTauRes(FILE* file);
 
     cuMatrix<int>* getFireCount(){
         return fireCount;

@@ -125,15 +125,14 @@ void PoolingSpiking::intrinsicPlasticity()
     dim3 block  = dim3(batch, outputAmount);
     float u = 0.2;
     g_intrinsic_plasticity<<<block, thread>>>(fireCount->getDev(), taugradTmp->getDev(), resgradTmp->getDev(), tau->getDev(), res->getDev(), endTime, tau->getArea(), outputSize2, T_REFRAC, threshold, u);
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("ConvSpiking::g_intrinsic_plasticity");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("ConvSpiking::g_intrinsic_plasticity");
 
     thread = batch;
     block = dim3(outputSize2, outputAmount);
     g_intrinsic_plasticity_gradadd<<<block, thread, 2 * sizeof(float) * batch>>>(taugradTmp->getDev(), taugrad->getDev(), resgradTmp->getDev(), resgrad->getDev(), batch, taugradTmp->getArea(), outputSize2);
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("ConvSpiking::g_intrinsic_plasticity_add");
-
 
     block = min((tau->getLen() + 255)/ 256, 5120);
     thread = 256;
@@ -144,8 +143,8 @@ void PoolingSpiking::intrinsicPlasticity()
         res->getDev(),
         tau->getLen(),
         0.5);
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("ConvSpiking::g_intrinsic_plasticity");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("ConvSpiking::g_intrinsic_plasticity");
 }
 
 void PoolingSpiking::feedforward()
@@ -168,8 +167,8 @@ void PoolingSpiking::feedforward()
         inputs->getArea(),
         inputs_resp->getArea(),
         outputAmount);
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("PoolSpiking::g_PoolingSpiking_fast_input_response");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("PoolSpiking::g_PoolingSpiking_fast_input_response");
 
 	dim3 block = dim3(batch, div);     // remain * div ~~= outputAmount / remain
 	dim3 thread= dim3(threadx, remain);
@@ -187,8 +186,8 @@ void PoolingSpiking::feedforward()
         tau->getDev(),
         res->getDev(),
         TAU_S);
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("PoolSpiking::g_PoolingSpiking_feedforward");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("PoolSpiking::g_PoolingSpiking_feedforward");
 
     int outputDim2 = outputDim * outputDim;
     block = dim3(batch, outputAmount);
@@ -201,8 +200,8 @@ void PoolingSpiking::feedforward()
             outputs->getArea(),
             outputDim2,
             endTime);
-    checkCudaErrors(cudaStreamSynchronize(0));
-    getLastCudaError("PoolingSpiking:g_response_2_spiketime");
+    //checkCudaErrors(cudaStreamSynchronize(0));
+    //getLastCudaError("PoolingSpiking:g_response_2_spiketime");
 
 }
 
@@ -229,8 +228,8 @@ void PoolingSpiking::backpropagation()
             T_REFRAC,
             TAU_M,
             TAU_S);
-        checkCudaErrors(cudaStreamSynchronize(0));
-        getLastCudaError("PoolingSpiking::g_PoolingSpiking_backpropagation_no_atomic");
+        //checkCudaErrors(cudaStreamSynchronize(0));
+        //getLastCudaError("PoolingSpiking::g_PoolingSpiking_backpropagation_no_atomic");
     }else{
         preDelta->gpuClear();
         g_PoolingSpiking_backpropagation<<<block, thread>>>(
@@ -250,8 +249,8 @@ void PoolingSpiking::backpropagation()
             T_REFRAC,
             TAU_M,
             TAU_S);
-        checkCudaErrors(cudaStreamSynchronize(0));
-        getLastCudaError("PoolingSpiking::g_PoolingSpiking_backpropagation");
+        //checkCudaErrors(cudaStreamSynchronize(0));
+        //getLastCudaError("PoolingSpiking::g_PoolingSpiking_backpropagation");
     }
 	
 }
@@ -312,6 +311,28 @@ PoolingSpiking::PoolingSpiking(std::string name)
 	Layers::instance()->set(m_name, this);
 }
 
+void PoolingSpiking::saveTauRes(FILE* file)
+{
+    tau->toCpu();
+    int len = tau->getLen();
+    fprintf(file, "The tau in %s: ", m_name.c_str());
+    for(int c = 0; c < tau->channels; ++c)
+        for(int i = 0; i < tau->rows; ++i)
+            for(int j = 0; j < tau->cols; ++j)
+                fprintf(file, "%f ", tau->get(i, j, c));
+
+    fprintf(file, "\n");
+
+    res->toCpu();
+    len = res->getLen();
+    fprintf(file, "The res in %s: ", m_name.c_str());
+    for(int c = 0; c < res->channels; ++c)
+        for(int i = 0; i < res->rows; ++i)
+            for(int j = 0; j < res->cols; ++j)
+                fprintf(file, "%f ", res->get(i, j, c));
+
+    fprintf(file, "\n");
+}
 
 /*
  * blocks : dim3(batch, outputAmount / remain, endTime), remain can be 1, 2, 16, or 64
