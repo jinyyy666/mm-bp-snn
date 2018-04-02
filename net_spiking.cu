@@ -416,7 +416,7 @@ void pretrainNetwork(cuMatrixVector<bool>& x, int batch)
             start = (int)x.size() - batch;
         }
         networkPretrain(k * batch - start);
-        printf("\b\b\b\b\b\b\b\b\b");
+        printf("\b\b\b\b\b\b\b\b\b\b\b\b");
     }
 }
 
@@ -531,7 +531,7 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
     sprintf(logStr, "correct is %d\n", cuSCorrect->get(0,0,0));
     LOG(logStr, "Result/log.txt");
 
-    //pretrainNetwork(x, batch);
+    pretrainNetwork(x, batch);
 
     int epochs = Config::instance()->getTestEpoch();
 
