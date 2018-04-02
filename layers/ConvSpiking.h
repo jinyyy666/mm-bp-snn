@@ -18,6 +18,7 @@ public:
         delete inputs_resp;
         delete curDelta;
         delete fireCount;
+        delete sideEffect;
         delete weightSqSum;
         delete tau;
         delete res;
@@ -112,6 +113,7 @@ private:
 
     cuMatrix<int>*   fireCount;
     cuMatrix<int>*   preFireCount;
+    cuMatrix<float>* sideEffect;    
 
     cuMatrix<float>* weightSqSum;
     cuMatrix<float>* b1_t;
