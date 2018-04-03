@@ -27,9 +27,9 @@
 
 //#define VERIFY
 //#define VERIFY_RESERVOIR
-#define SPIKING_CNN
+//#define SPIKING_CNN
 //#define VERIFY_SOFTMAX_SPIKING_CNN
-//#define VERIFY_SPIKING_CNN
+#define VERIFY_SPIKING_CNN
 
 void runMnist();
 void runCifar10();
@@ -526,10 +526,10 @@ void runSpikingMnist(){
     */
 	buildSpikingNetwork(trainX.size(), testX.size());
 
-    
-	//if(cmd == 2)
-	cuReadSpikingNet("Result/checkPoint_cnn_current_best_rest.txt");
-    
+    /*
+	if(cmd == 2)
+	    cuReadSpikingNet("Result/checkPoint.txt");
+    */
 
 	//* learning rate
 	std::vector<float> nlrate;

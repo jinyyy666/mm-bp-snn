@@ -103,8 +103,7 @@ __global__ void g_getDelta_output(
     int*   fireCount,
     float* groundTruth,
     int    len,
-    float  MARGIN,
-    float  DESIRED_LEVEL);
+    float  MARGIN);
   
 /*
  * dim3 block = dim3(batch);
@@ -324,7 +323,7 @@ void Spiking::backpropagation()
         //getLastCudaError("Spiking::g_getCost_output");
 
         // compute the delta (error)
-        g_getDelta_output<<<dim3(1), dim3(256)>>>(curDelta->getDev(), fireCount->getDev(), groundTruth->getDev(), curDelta->getLen(), MARGIN, DESIRED_LEVEL);
+        g_getDelta_output<<<dim3(1), dim3(256)>>>(curDelta->getDev(), fireCount->getDev(), groundTruth->getDev(), curDelta->getLen(), MARGIN);
         //cudaStreamSynchronize(0);
         //getLastCudaError("Spiking::g_getDelta_output");
 
@@ -346,7 +345,7 @@ void Spiking::backpropagation()
                 outputSize,
                 endTime,
                 T_REFRAC,
-                TAU_M,
+                tau->getDev(),
                 TAU_S);
             //cudaStreamSynchronize(0);
             //getLastCudaError("Spiking::g_getLateralFactor_output");
@@ -384,19 +383,18 @@ void Spiking::backpropagation()
         outputSize,
         endTime,
         T_REFRAC,
-        TAU_M,
+        tau->getDev(),
         TAU_S);
     //checkCudaErrors(cudaStreamSynchronize(0));
     //getLastCudaError("g_Spiking_synaptic_effect");
    
-    // divide the curDelta by vth
-    /*
+    // divide the curDelta by vth    
     block = dim3(batch, 1);
     thread = dim3(min(1024, outputSize));
     g_divide_by_threshold<<<block, thread>>>(curDelta->getDev(), curDelta->getArea(), curDelta->cols, threshold);
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("g_divide_by_threshold");
-    */
+
 
     // compute preDelta: curDelta: batch * outputSize; w: outputSize * inputSize
     if(preDelta == NULL){
@@ -1363,7 +1361,7 @@ __global__ void g_getCost_output(
  * dim3 block = dim3(1);
  * dim3 thread= dim3(256);
  */
-__global__ void g_getDelta_output(float* outputDelta, int* fireCount, float* groundTruth, int len, float MARGIN, float DESIRED_LEVEL)
+__global__ void g_getDelta_output(float* outputDelta, int* fireCount, float* groundTruth, int len, float MARGIN)
 {
     for(int i = 0; i < len; i += blockDim.x)
     {
@@ -1371,7 +1369,7 @@ __global__ void g_getDelta_output(float* outputDelta, int* fireCount, float* gro
         if(id < len)
         {
             float diff = fabsf(float(fireCount[id]) - groundTruth[id]);
-            outputDelta[id] = diff > MARGIN ? (fireCount[id] - groundTruth[id]) / DESIRED_LEVEL : 0;
+            outputDelta[id] = diff > MARGIN ? fireCount[id] - groundTruth[id] : 0;
         }
     }
 }
@@ -1407,7 +1405,7 @@ __global__ void g_getLateralFactor_output(
     int outputSize,
     int endTime,
     int T_REFRAC,
-    float TAU_M,
+    float* tau,
     float TAU_S)
 {
     extern __shared__ float d_sum[];
@@ -1436,11 +1434,13 @@ __global__ void g_getLateralFactor_output(
             int f_cnt_l = output_fireCount[l_idx];
             float d_l = (f_cnt_l > 0 || (f_cnt_l == 0 && l_idx == cls)) ? 1 / vth : 0;
             // j --> l
-            float e_jl = d_Spiking_accumulate_effect(output_time, output_time, f_cnt_l, f_cnt_j, l_idx, j_idx, outputSize, outputSize, endTime, T_REFRAC, TAU_M, TAU_S);
+            float TAU_M_l = tau[l_idx];
+            float e_jl = d_Spiking_accumulate_effect(output_time, output_time, f_cnt_l, f_cnt_j, l_idx, j_idx, outputSize, outputSize, endTime, T_REFRAC, TAU_M_l, TAU_S);
             float effect_ratio_jl = (f_cnt_j == 0 || f_cnt_l == 0) ? 1 : e_jl / f_cnt_j;
             
             // l --> j
-            float e_lj = d_Spiking_accumulate_effect(output_time, output_time, f_cnt_j, f_cnt_l, j_idx, l_idx, outputSize, outputSize, endTime, T_REFRAC, TAU_M, TAU_S);
+            float TAU_M_j = tau[j_idx];
+            float e_lj = d_Spiking_accumulate_effect(output_time, output_time, f_cnt_j, f_cnt_l, j_idx, l_idx, outputSize, outputSize, endTime, T_REFRAC, TAU_M_j, TAU_S);
             float effect_ratio_lj = (f_cnt_l == 0 || f_cnt_j == 0) ? 1 : e_lj / f_cnt_l;
 
             d_sum[tid] += effect_ratio_jl * d_l * effect_ratio_lj * d_j; 
@@ -1807,7 +1807,7 @@ __global__ void g_Spiking_synaptic_effect(
         int outputSize,
         int endTime,
         int T_REFRAC,
-        float TAU_M,
+        float* tau,
         float TAU_S)
 {
     int batchId = blockIdx.x;
@@ -1828,6 +1828,7 @@ __global__ void g_Spiking_synaptic_effect(
         int o_idx = i + threadIdx.x;
         if(o_idx < outputSize)
         {
+            float TAU_M = tau[o_idx];
             float e = d_Spiking_accumulate_effect(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], o_idx, i_idx, outputSize, inputSize, endTime, T_REFRAC, TAU_M, TAU_S);
             acc_effect[i_idx + o_idx * inputSize] = e;
             if(effectRatio != NULL){

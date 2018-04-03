@@ -26,7 +26,7 @@ __global__ void g_boostWeight_output(float* outputDelta, float* sample_weights, 
  * dim3 thread= min(1024, outputSize);
  */
 __global__ void g_getLateralFactor_output(int* outputs_time, int* batchFireCount, float w0, int* y,
-float* batchLFactor, float vth, int outputSize, int endTime, int T_REFRAC, float TAU_M,float TAU_S);
+float* batchLFactor, float vth, int outputSize, int endTime, int T_REFRAC, float* tau,float TAU_S);
 
 /*
  * dim3 block = dim3(batch);
@@ -40,7 +40,7 @@ __global__ void g_modifySpikes(bool* outputs, int* y, int* fireCount, int target
  */
 __global__ void g_Spiking_synaptic_effect(int* inputs_time, int* outputs_time, int* batchPreFireCount,
 int* batchFireCount, float* w, float* batchAccEffect, float* effectRatio, int inputSize, 
-int outputSize, int endTime, int T_REFRAC, float TAU_M, float TAU_S);
+int outputSize, int endTime, int T_REFRAC, float* tau, float TAU_S);
 
 
 

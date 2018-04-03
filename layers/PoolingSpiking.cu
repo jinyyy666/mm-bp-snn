@@ -54,7 +54,7 @@ __global__ void g_PoolingSpiking_backpropagation_no_atomic(
     int pSkip,
     int pSize,
     int T_REFRAC,
-    float TAU_M,
+    float* tau,
     float TAU_S);
 
 /*
@@ -226,7 +226,7 @@ void PoolingSpiking::backpropagation()
             pskip,
             psize,
             T_REFRAC,
-            TAU_M,
+            tau->getDev(),
             TAU_S);
         //checkCudaErrors(cudaStreamSynchronize(0));
         //getLastCudaError("PoolingSpiking::g_PoolingSpiking_backpropagation_no_atomic");
@@ -540,7 +540,7 @@ __global__ void g_PoolingSpiking_backpropagation_no_atomic(
     int pSkip,
     int pSize,
     int T_REFRAC,
-    float TAU_M,
+    float* tau,
     float TAU_S)
 {
     int batchId = blockIdx.x;
@@ -572,6 +572,7 @@ __global__ void g_PoolingSpiking_backpropagation_no_atomic(
     float val = pool[o_idx] / (pSize * pSize);
     if(i < convDim && j < convDim){
         int i_idx = i * convDim + j;
+        float TAU_M = tau[o_idx + ok * poolSize2];
         float e = d_Spiking_accumulate_effect(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], o_idx, i_idx, poolSize2, convSize2, endTime, T_REFRAC, TAU_M, TAU_S);
         int o_cnt = output_fireCount[o_idx];
         int i_cnt = input_fireCount[i_idx];

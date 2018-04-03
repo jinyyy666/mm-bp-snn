@@ -142,7 +142,7 @@ void SoftMaxSpiking::backpropagation()
             outputSize,
             endTime,
             T_REFRAC,
-            TAU_M,
+            tau->getDev(),
             TAU_S);
         cudaStreamSynchronize(0);
         getLastCudaError("SoftMaxSpiking::g_getLateralFactor_output");
@@ -180,7 +180,7 @@ void SoftMaxSpiking::backpropagation()
         outputSize,
         endTime,
         T_REFRAC,
-        TAU_M,
+        tau->getDev(),
         TAU_S);
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("g_SoftMaxSpiking_synaptic_effect");

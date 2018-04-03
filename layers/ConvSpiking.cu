@@ -68,7 +68,7 @@ __global__ void g_ConvSpiking_backpropagation(
         int     outputArea,
         int     inputArea,
         int     T_REFRAC,
-        float   TAU_M,
+        float*  tau,
         float   TAU_S);
 
 /*
@@ -92,7 +92,7 @@ __global__ void g_ConvSpiking_wgrad_sideEffect(
         int     inputArea,
         int     outputArea,
         int     T_REFRAC,
-        float   TAU_M,
+        float*  tau,
         float   TAU_S);
 
 
@@ -119,7 +119,7 @@ __global__ void g_ConvSpiking_wgrad(
         int     curDeltaArea,
         int     wgradTmpArea,
         int     T_REFRAC,
-        float   TAU_M,
+        float*  tau,
         float   TAU_S);
 
 /*
@@ -269,7 +269,7 @@ void ConvSpiking::backpropagation()
         outputs->getArea(),
         inputs->getArea(),
         T_REFRAC,
-        TAU_M,
+        tau->getDev(),
         TAU_S);
     //checkCudaErrors(cudaStreamSynchronize(0));
     //getLastCudaError("ConvSpiking::g_ConvSpiking_backpropagation");
@@ -407,7 +407,7 @@ void ConvSpiking::getGrad()
         inputs->getArea(),
         outputs->getArea(),
         T_REFRAC,
-        TAU_M,
+        tau->getDev(),
         TAU_S);
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("g_ConvSpiking_wgrad_sideEffect");
@@ -436,7 +436,7 @@ void ConvSpiking::getGrad()
         curDelta->getArea(),
         wgradTmp[0]->getArea(),
         T_REFRAC,
-        TAU_M,
+        tau->getDev(),
         TAU_S);
 
     //checkCudaErrors(cudaStreamSynchronize(0));
@@ -968,7 +968,7 @@ __global__ void g_ConvSpiking_backpropagation(
         int     outputArea,
         int     inputArea,
         int     T_REFRAC,
-        float   TAU_M,
+        float*  tau,
         float   TAU_S)
 {
     extern  __shared__ float _sum[];
@@ -1009,6 +1009,7 @@ __global__ void g_ConvSpiking_backpropagation(
 
             if(cx >= 0 && cx < curDim && cy >= 0 && cy < curDim) {
                 int o_idx = cx * curDim + cy;
+                float TAU_M = tau[o_idx + ok * curSize2];
                 float e = d_Spiking_accumulate_effect(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], o_idx, i_idx, curSize2, preSize2, endTime, T_REFRAC, TAU_M, TAU_S);
                 int o_cnt = output_fireCount[o_idx];
                 int i_cnt = input_fireCount[i_idx];
@@ -1055,7 +1056,7 @@ __global__ void g_ConvSpiking_wgrad_sideEffect(
         int     inputArea,
         int     outputArea,
         int     T_REFRAC,
-        float   TAU_M,
+        float*  tau,
         float   TAU_S)
 {
     extern __shared__ float _sum[];
@@ -1097,6 +1098,7 @@ __global__ void g_ConvSpiking_wgrad_sideEffect(
             int yy = y + j - padding;
             if(xx >= 0 && xx < inputDim && yy >= 0 && yy < inputDim){
                 int i_idx = xx * inputDim + yy;
+                float TAU_M = tau[o_idx + ok * outputSize2];
                 float e = d_Spiking_accumulate_effect(output_time, input_time, o_cnt, input_fireCount[i_idx], o_idx, i_idx, outputSize2, inputSize2, endTime, T_REFRAC, TAU_M, TAU_S);
                 float ratio = o_cnt == 0 ? 0.5 : e/o_cnt;
                 _sum[tid] += w[i * kernelSize + j] * ratio;
@@ -1144,7 +1146,7 @@ __global__ void g_ConvSpiking_wgrad(
         int     curDeltaArea,
         int     wgradTmpArea,
         int     T_REFRAC,
-        float   TAU_M,
+        float*  tau,
         float   TAU_S)
 {
     extern __shared__ float _sum[];
@@ -1187,6 +1189,7 @@ __global__ void g_ConvSpiking_wgrad(
             int cy = j + y - padding;
             if(cx >= 0 &&  cy >= 0 && cx < inputDim && cy < inputDim){
                 int i_idx = cx * inputDim + cy;
+                float TAU_M = tau[o_idx + ok * outputSize2];
                 float e = d_Spiking_accumulate_effect(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], o_idx, i_idx, outputSize2, inputSize2, endTime, T_REFRAC, TAU_M, TAU_S);
                 _sum[tid] += e * (1 + s_effect) * curDelta[x * curDeltaDim + y];
 #ifdef DEBUG
