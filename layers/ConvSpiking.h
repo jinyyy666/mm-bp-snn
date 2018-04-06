@@ -46,6 +46,7 @@ public:
 	void initRandom();
 	void initFromCheckpoint(FILE* file);
     void initFromDumpfile(const std::string& filename, cuMatrixVector<float>& cuW);
+    void initTimeConst(FILE* file);
 	void save(FILE* file);
     void saveTauRes(FILE* file);
 

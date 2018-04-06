@@ -104,6 +104,7 @@ public:
 	void initFromCheckpoint(FILE* file);
     void initBiasFromDumpfile(const std::string& filename, cuMatrix<float>*& cuW);
     void initFromDumpfile(const std::string& filename, cuMatrix<float>*& cuW);
+    void initTimeConst(FILE* file);
 	void save(FILE* file);
     void saveTauRes(FILE* file);
 

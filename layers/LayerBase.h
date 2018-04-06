@@ -67,6 +67,7 @@ public:
     virtual void verify(const std::string& phrase) = 0;
     virtual void intrinsicPlasticity() = 0;
     virtual void saveTauRes(FILE* pout){};
+    virtual void initTimeConst(FILE* pin){};
 	int inputDim;
 	int outputDim;
     int endTime;

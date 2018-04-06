@@ -15,6 +15,11 @@
 void cuReadSpikingNet(const char* path);
 
 /*
+ * function               : read the network time consts from checkpoint
+ */
+void cuReadTimeConst(const char* path);
+
+/*
  * function: trainning the network
  */
 

@@ -82,6 +82,7 @@ public:
     }
     
     void saveTauRes(FILE* file);
+    void initTimeConst(FILE* file);
 
 private:
 	cuMatrix<bool>*  inputs;

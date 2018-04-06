@@ -395,7 +395,6 @@ void Spiking::backpropagation()
     checkCudaErrors(cudaStreamSynchronize(0));
     getLastCudaError("g_divide_by_threshold");
 
-
     // compute preDelta: curDelta: batch * outputSize; w: outputSize * inputSize
     if(preDelta == NULL){
         ConfigSpiking* config = (ConfigSpiking*)Config::instance()->getLayerByName(m_name);
@@ -741,24 +740,18 @@ Spiking::Spiking(std::string name)
 void Spiking::saveTauRes(FILE* file)
 {
     tau->toCpu();
-    int len = tau->getLen();
-    fprintf(file, "The tau in %s: ", m_name.c_str());
+    res->toCpu();
+
     for(int c = 0; c < tau->channels; ++c)
         for(int i = 0; i < tau->rows; ++i)
             for(int j = 0; j < tau->cols; ++j)
                 fprintf(file, "%f ", tau->get(i, j, c));
 
-    fprintf(file, "\n");
-
-    res->toCpu();
-    len = res->getLen();
-    fprintf(file, "The res in %s: ", m_name.c_str());
     for(int c = 0; c < res->channels; ++c)
         for(int i = 0; i < res->rows; ++i)
             for(int j = 0; j < res->cols; ++j)
                 fprintf(file, "%f ", res->get(i, j, c));
 
-    fprintf(file, "\n");
 }
 
 void Spiking::save(FILE* file)
@@ -917,6 +910,41 @@ void Spiking::initRandom()
         initLaterial();
     }
 
+}
+
+void Spiking::initTimeConst(FILE* file)
+{
+    float val = 0;
+    for(int c = 0; c < tau->channels; ++c){
+        for(int i = 0; i < tau->rows; ++i){
+            for(int j = 0; j < tau->cols; ++j){
+                if(fscanf(file, "%f", &val) == EOF)
+                {
+                    char logStr[256];
+                    sprintf(logStr, "scanf fail for layer: %s\n", m_name.c_str());
+                    LOG(logStr, "Result/log.txt");
+                    assert(0);
+                }
+                tau->set(i, j, c, val);
+            }
+        }
+    }
+    for(int c = 0; c < res->channels; ++c){
+        for(int i = 0; i < res->rows; ++i){
+            for(int j = 0; j < res->cols; ++j){
+                if(fscanf(file, "%f", &val) == EOF)
+                {
+                    char logStr[256];
+                    sprintf(logStr, "scanf fail for layer: %s\n", m_name.c_str());
+                    LOG(logStr, "Result/log.txt");
+                    assert(0);
+                }
+                res->set(i, j, c, val);
+            }
+        }
+    }
+    tau->toGpu();
+    res->toGpu();
 }
 
 void Spiking::initFromCheckpoint(FILE* file)

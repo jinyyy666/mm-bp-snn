@@ -66,6 +66,16 @@ void cuReadSpikingNet(const char* path)
     fclose(pIn);
 };
 
+void cuReadTimeConst(const char* path)
+{
+    FILE *pIn = fopen(path, "r");
+    for(int i = 0; i < (int)spiking_que.size(); i++){
+        SpikingLayerBase* layer = (SpikingLayerBase*) Layers::instance()->get(spiking_que[i]->m_name);
+        layer->initTimeConst(pIn);
+    }
+    fclose(pIn);
+}
+
 void buildSpikingNetwork(int trainLen, int testLen)
 {
     /*BFS*/
@@ -542,7 +552,8 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
     sprintf(logStr, "correct is %d\n", cuSCorrect->get(0,0,0));
     LOG(logStr, "Result/log.txt");
 
-    pretrainNetwork(x, batch);
+    cuReadTimeConst("Result/timeConstants.txt");
+    //pretrainNetwork(x, batch);
 
     my_start = (float)clock();
     predictTestRate(x, y, testX, testY, batch, nclasses, handle);
