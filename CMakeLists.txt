@@ -36,6 +36,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3 -rdynamic")
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}
   -gencode arch=compute_60,code=sm_60
   -O3
+  --use_fast_math
 #  -G
 #  -g
   -rdc=true

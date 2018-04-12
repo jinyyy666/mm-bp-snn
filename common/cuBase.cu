@@ -62,7 +62,8 @@ __device__ float d_Spiking_accumulate_effect(
         int lb = max(1, int(t_post - 4*TAU_M));
         for(int j = 0; j < n_ispikes; ++j){
             int t_pre = input_time[i_idx * endTime + j];
-            if(t_pre < lb || t_pre >= ub)    continue;
+            if(t_pre < lb)    continue;
+            if(t_pre >= ub)    break;
 
             int pre_time = t_pre + T_REFRAC;
             if(pre_time > t_post)   continue;
