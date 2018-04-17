@@ -136,6 +136,7 @@ __global__ void g_Spiking_wgrad(
  */
 __global__ void g_Spiking_wgrad_sideEffect(
         float* weights,
+        int* batchPreFireCount,
         int* batchFireCount,
         float* batchAccEffect,
         float  vth,
@@ -482,6 +483,7 @@ void Spiking::getGrad()
     dim3 block  = dim3(batch, outputSize);
     g_Spiking_wgrad_sideEffect<<<block, thread, sizeof(float) * min(1024, inputSize)>>>(
         w->getDev(),
+        preFireCount->getDev(),
         fireCount->getDev(),
         accEffect->getDev(),
         threshold,
@@ -1585,6 +1587,7 @@ __global__ void g_Spiking_wgrad(
  */
 __global__ void g_Spiking_wgrad_sideEffect(
         float* weights,
+        int* batchPreFireCount,
         int* batchFireCount,
         float* batchAccEffect,
         float  vth,
@@ -1600,19 +1603,22 @@ __global__ void g_Spiking_wgrad_sideEffect(
     __syncthreads();
 
     int wSize        = outputSize * inputSize;
-    int* fireCount   = batchFireCount + batchId * outputSize;
+    int* input_fireCount = batchPreFireCount + batchId * inputSize;;
+    int* output_fireCount   = batchFireCount + batchId * outputSize;
     float* acc_effect= batchAccEffect + batchId * wSize;
     float* side_effect = batchSideEffect + batchId * outputSize;
-    int o_cnt = fireCount[o_idx];
+    int o_cnt = output_fireCount[o_idx];
 
     for(int i = 0; i < inputSize; i += blockDim.x)
     {
         int idx = i + tid;
         if(idx < inputSize)
         {
+            int i_cnt = input_fireCount[idx];
             float w = weights[idx + o_idx * inputSize];
             float e = acc_effect[idx + o_idx * inputSize];
-            float ratio = o_cnt == 0 ? 0.5 : e/o_cnt;
+            float alpha_ratio = i_cnt == 0 || o_cnt == 0 ? 0 : e/(o_cnt * o_cnt * i_cnt);
+            float ratio = o_cnt == 0 ? 0.5 : e/o_cnt + alpha_ratio;
             _sum[tid] += w * ratio;
         }
     }
@@ -1757,7 +1763,7 @@ __global__ void g_Spiking_synaptic_effect(
             if(effectRatio != NULL){
                 int o_cnt = output_fireCount[o_idx];
                 int i_cnt = input_fireCount[i_idx];
-                float ratio = i_cnt == 0 || o_cnt == 0 ? 1 : e / float(i_cnt);
+                float ratio = i_cnt == 0 || o_cnt == 0 ? 1 : e / float(i_cnt) + e / (i_cnt * i_cnt * o_cnt);
                 effectRatio[i_idx + o_idx * inputSize] = ratio * w[i_idx + o_idx * inputSize];
             }
         }

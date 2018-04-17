@@ -943,7 +943,7 @@ __global__ void g_ConvSpiking_backpropagation(
                 float e = d_Spiking_accumulate_effect(output_time, input_time, output_fireCount[o_idx], input_fireCount[i_idx], o_idx, i_idx, curSize2, preSize2, endTime, T_REFRAC, TAU_M, TAU_S);
                 int o_cnt = output_fireCount[o_idx];
                 int i_cnt = input_fireCount[i_idx];
-                float ratio = i_cnt == 0 || o_cnt == 0 ? 1 : e / float(i_cnt);
+                float ratio = i_cnt == 0 || o_cnt == 0 ? 1 : e / float(i_cnt) + e / (i_cnt * i_cnt * o_cnt);
                 _sum[threadIdx.x] += curDelta[cx * curDim + cy] * w[x * kernelSize + y] * ratio;
             }
         }
@@ -1028,8 +1028,10 @@ __global__ void g_ConvSpiking_wgrad_sideEffect(
             int yy = y + j - padding;
             if(xx >= 0 && xx < inputDim && yy >= 0 && yy < inputDim){
                 int i_idx = xx * inputDim + yy;
-                float e = d_Spiking_accumulate_effect(output_time, input_time, o_cnt, input_fireCount[i_idx], o_idx, i_idx, outputSize2, inputSize2, endTime, T_REFRAC, TAU_M, TAU_S);
-                float ratio = o_cnt == 0 ? 0.5 : e/o_cnt;
+                int i_cnt = input_fireCount[i_idx];
+                float e = d_Spiking_accumulate_effect(output_time, input_time, o_cnt, i_cnt, o_idx, i_idx, outputSize2, inputSize2, endTime, T_REFRAC, TAU_M, TAU_S);
+                float alpha_ratio = i_cnt == 0 || o_cnt == 0 ? 0 : e/(o_cnt * o_cnt * i_cnt);
+                float ratio = o_cnt == 0 ? 0.5 : e/o_cnt + alpha_ratio;
                 _sum[tid] += w[i * kernelSize + j] * ratio;
             }
         }
