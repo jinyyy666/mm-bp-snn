@@ -9,8 +9,8 @@ OPTIMIZER = adam;               # use adam as the optimizer , by default is sgd 
 SHOWIMAGE = false;              #show the images after transformation#
 TEST_EPOCH = 200;                 #the period to get the test dataset's error rate#
 WHITE_NOISE = 0.0;  
-#LAMBDA_REG  = 10;  #             # param for weight regularization #
-#BETA_REG    = 0.04; #              
+#LAMBDA_REG  = 10;#               # param for weight regularization #
+#BETA_REG    = 0.08;#               
 
 WEIGHT_LIMIT= 8.0;
 
@@ -22,11 +22,11 @@ END_TIME = 400;                 #The spike train duration#
 #CROP = 0;#                     #0<= crop <=imgSize#
 SCALE = 12;                     #12% of ImgSize#
 ROTATION = 12;                  #angle#
-DISTORTION = 4;                 #just for mnist#
+DISTORTION = 3.4;                 #just for mnist#
 
 
-TRAIN_SAMPLES = 6;              # number of train/test samples#
-TEST_SAMPLES = 1;
+TRAIN_SAMPLES = 60000;              # number of train/test samples#
+TEST_SAMPLES = 10000;
 
 [
 LAYER = DATASPIKING;
@@ -40,7 +40,7 @@ NAME  = conv1;
 INPUT = data;
 KERNEL_SIZE = 5;
 PADDING = 0;
-KERNEL_AMOUNT = 16;
+KERNEL_AMOUNT = 15;
 initW = 0.5;
 initType = Bernoulli;           #Gaussian, Bernoulli#
 VTH = 5;
@@ -70,7 +70,7 @@ PADDING = 0;
 KERNEL_AMOUNT = 40;
 initW = 0.5;
 initType = Bernoulli;           #Gaussian, Bernoulli#
-VTH = 10;
+VTH = 12;
 T_REFRAC = 2;
 TAU_M = 64;
 TAU_S = 8;
@@ -82,7 +82,7 @@ NAME  = pooling2;
 INPUT = conv2;
 SIZE = 2;
 SKIP = 2;
-VTH = 2;
+VTH = 4;
 T_REFRAC = 2;
 TAU_M = 64;
 TAU_S = 8;
@@ -108,7 +108,7 @@ NUM_CLASSES = 10;
 NAME  = output;
 NUM_NEURONS = 10;
 INPUT = hidden_0;
-VTH = 5;
+VTH = 10;
 T_REFRAC = 2;
 TAU_M = 64;
 TAU_S = 8;
