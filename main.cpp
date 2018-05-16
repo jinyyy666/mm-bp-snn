@@ -29,7 +29,7 @@
 //#define VERIFY_RESERVOIR
 //#define SPIKING_CNN
 //#define VERIFY_SOFTMAX_SPIKING_CNN
-#define VERIFY_SPIKING_CNN
+//#define VERIFY_SPIKING_CNN
 
 void runMnist();
 void runCifar10();
@@ -47,7 +47,7 @@ std::vector<int> g_argv;
 int main (int argc, char** argv)
 {
     //cudaDeviceReset();
-    cudaSetDevice(1);
+    //cudaSetDevice(0);
 #ifdef linux
     signal(SIGSEGV, handler);   // install our handler
 #endif
@@ -57,15 +57,15 @@ int main (int argc, char** argv)
 		g_argv.push_back(atoi(argv[2]));
 	}
 	printf("1. MNIST\n2. CIFAR-10\n3. CHINESE\n4. CIFAR-100\n5. VOTE MNIST\n6. NMnist\n7. Spiking Mnist\n8. Spoken English Letter\nChoose the dataSet to run:");
-	int cmd = 7;
-    /*
+	int cmd = -1;
+    
 	if(g_argv.size() >= 2)
 		cmd = g_argv[0];
 	else 
 		if(1 != scanf("%d", &cmd)){
             LOG("scanf fail", "result/log.txt");
         }
-    */
+    
 	if(cmd == 1)
 		runMnist();
 	else if(cmd == 2)
@@ -417,7 +417,7 @@ void runNMnist(){
     
 	int cmd;
 	cuInitDistortionMemery(batch, 28);
-    /*
+    
 	printf("1. random init weight\n2. Read weight from the checkpoint\nChoose the way to init weight:");
 
 	if(g_argv.size() >= 2)
@@ -426,12 +426,12 @@ void runNMnist(){
 		if(1 != scanf("%d", &cmd)){
             LOG("scanf fail", "result/log.txt");
         }
-    */
+    
 	buildSpikingNetwork(trainX.size(), testX.size());
 
     
-	//if(cmd == 2)
-		//cuReadSpikingNet("Result/checkPoint.txt");
+	if(cmd == 2)
+		cuReadSpikingNet("Result/checkPoint.txt");
     
 
 	//* learning rate
@@ -514,7 +514,7 @@ void runSpikingMnist(){
     
 	int cmd;
 	cuInitDistortionMemery(batch, ImgSize);
-    /*
+    
 	printf("1. random init weight\n2. Read weight from the checkpoint\nChoose the way to init weight:");
 
 	if(g_argv.size() >= 2)
@@ -523,13 +523,13 @@ void runSpikingMnist(){
 		if(1 != scanf("%d", &cmd)){
             LOG("scanf fail", "result/log.txt");
         }
-    */
+    
 	buildSpikingNetwork(trainX.size(), testX.size());
 
-    /*
+    
 	if(cmd == 2)
 		cuReadSpikingNet("Result/checkPoint.txt");
-    */
+    
 
 	//* learning rate
 	std::vector<float> nlrate;
