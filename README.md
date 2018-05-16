@@ -61,17 +61,17 @@ Run the matlab code: [NMNIST_Converter.m](https://github.com/jinyyy666/mm-bp-snn
 * MNIST 
 ```sh
 $ cd mm-bp-snn
-$ ./build/CUDA-CNN 6 1
+$ ./build/CUDA-SNN 6 1
 ```
 * N-MNIST 
 ```sh
 $ cd mm-bp-snn
-$ ./build/CUDA-CNN 7 1
+$ ./build/CUDA-SNN 7 1
 ```
 * For Spiking-CNN, you need to enable the #define SPIKING_CNN in main.cpp, and recompile.
 ```sh
 $ cd mm-bp-snn
-$ ./build/CUDA-CNN 6 1
+$ ./build/CUDA-SNN 6 1
 ```
 
 ##### For Window user
