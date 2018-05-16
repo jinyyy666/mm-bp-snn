@@ -38,6 +38,6 @@ void cuFreeSNNMemory(
 	cuMatrixVector<bool>&trainX, 
 	cuMatrixVector<bool>&testX);
 
-void getSpikingNetworkCost(int* y);
+void getSpikingNetworkCost(int* y, float* weights, int* vote, int start);
 
 #endif

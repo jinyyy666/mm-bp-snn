@@ -24,9 +24,13 @@ int cuSCurCorrect;
 cuMatrix<int>*  cuSCorrect = NULL;
 cuMatrix<int>*  cuSVote = NULL;
 cuMatrix<bool>* cuSPredictions = NULL;
+cuMatrix<float>*cuSOutput = NULL;
+
 cuMatrix<int>*  cuSTrCorrect = NULL;
 cuMatrix<int>*  cuSTrVote = NULL;
 cuMatrix<bool>* cuSTrPredictions = NULL;
+cuMatrix<float>* cuSTrOutput = NULL;
+
 cuMatrix<float>* cuSampleWeight = NULL;
 std::vector<ConfigBase*> spiking_que;
 
@@ -55,6 +59,48 @@ void cuReadSpikingNet(const char* path)
 
     fclose(pIn);
 };
+
+void recordWrongPredictions(int* y, bool* preds, float* dec_outs, int num_samples, int nclasses)
+{
+    FILE *pOut = fopen("Result/wrongPredictions.txt", "a");
+    if(pOut == NULL){
+        printf("Cannot open the file: Result/wrongPredictions.txt\n");
+        assert(0);
+    }
+    fprintf(pOut, "\n====================================================\n");
+    fprintf(pOut, "Incorrect predicted sample indices: \n");
+    int cnt = 0;
+    for(int i = 0; i < num_samples; ++i){
+         if(preds[i] == false) {
+            fprintf(pOut, "%d, ", i);
+            cnt++;
+        }
+        if(cnt == 10){
+            fprintf(pOut, "\n");
+            cnt = 0;
+        }
+    }
+    fprintf(pOut, "\n====================================================\n");
+    for(int i = 0; i < num_samples; ++i){
+         //if(preds[i] == false) {
+            fprintf(pOut, "True label: %d of %d_th sample\n", y[i], i);
+            float _max = -1;
+            int rid = 0;
+            for(int j = 0; j < nclasses; j++) {
+                float v = dec_outs[j + i*nclasses];
+                fprintf(pOut, "%g, ", v);
+                if(v > _max)
+                {
+                    _max = v;
+                    rid = j;
+                }
+            }
+            fprintf(pOut, "\n");
+            fprintf(pOut, "Prediction: %d\n", rid);
+        //}
+    }
+    fclose(pOut);
+}
 
 void buildSpikingNetwork(int trainLen, int testLen)
 {
@@ -113,6 +159,7 @@ void buildSpikingNetwork(int trainLen, int testLen)
 	{
 		cuSCorrect = new cuMatrix<int>(1,1,1);
 		cuSVote    = new cuMatrix<int>(testLen, Config::instance()->getClasses(), 1);
+		cuSOutput  = new cuMatrix<float>(testLen, Config::instance()->getClasses(), 1);
         cuSPredictions = new cuMatrix<bool>(testLen, 1, 1);
 	}
     //* cuSTrCorrect and cuSTrVote for tracking the training results
@@ -120,6 +167,7 @@ void buildSpikingNetwork(int trainLen, int testLen)
     {
         cuSTrCorrect = new cuMatrix<int>(1,1,1);
         cuSTrVote = new cuMatrix<int>(trainLen, Config::instance()->getClasses(), 1);
+		cuSTrOutput = new cuMatrix<float>(trainLen, Config::instance()->getClasses(), 1);
         cuSTrPredictions = new cuMatrix<bool>(trainLen, 1, 1);
     }
     // boost weighted training
@@ -145,18 +193,19 @@ void cuFreeSNNMemory(
  * block = dim3(1)
  * thread = dim3(batch)
  */
-__global__ void g_getPredict(int* batchfireCount, int cols,  int start, int* vote)
+__global__ void g_getPredict(int* batchfireCount, int cols,  int start, int* vote, float* dec_outputs)
 {
     int batchid = threadIdx.x;
     if(batchid < start) return;
     int* p = batchfireCount + batchid * cols;
     int* votep = vote + batchid * cols;
-
+    float* dec = dec_outputs + batchid * cols;
     int r = 0;
     int maxCount = 0;
     for(int i = 0; i < cols; i++)
     {
         int cnt = p[i];
+        dec[i] = (float)cnt;
         if(maxCount < cnt)
         {
             maxCount = cnt;
@@ -170,18 +219,21 @@ __global__ void g_getPredict(int* batchfireCount, int cols,  int start, int* vot
 * Get the predict based on softmax
 * dim3(1),dim3(batch)
 */
-__global__ void g_getPredict_softmax(float* softMaxP, int cols,  int start, int* vote)
+__global__ void g_getPredict_softmax(float* softMaxP, int cols,  int start, int* vote, float* dec_outputs)
 {
 	int id = threadIdx.x;
 	if(id < start) return;
 	float* p = softMaxP + id * cols;
 	int* votep= vote     + id * cols;
+    float* dec = dec_outputs + id * cols;
 
 	int r = 0;
 	float maxele = log(p[0]);
+    dec[0] = maxele;
 	for(int i = 1; i < cols; i++)
 	{
 		float val = log(p[i]);
+        dec[0] = val;
 		if(maxele < val)
 		{
 			maxele = val;
@@ -192,7 +244,7 @@ __global__ void g_getPredict_softmax(float* softMaxP, int cols,  int start, int*
 }
 
 //* get the prediction from the spiking output layer
-void outputPredict(int* vote, int start)
+void outputPredict(int* vote, float* dec_outputs, int start)
 {
     for(int i = 0; i < (int)spiking_que.size(); i++){
         if(spiking_que[i]->m_name == std::string("output")){
@@ -200,7 +252,8 @@ void outputPredict(int* vote, int start)
                     Layers::instance()->get(spiking_que[i]->m_name)->getFireCount()->getDev(),
                     Layers::instance()->get(spiking_que[i]->m_name)->getFireCount()->cols,
                     start,
-                    vote);
+                    vote,
+                    dec_outputs);
             cudaStreamSynchronize(0);
             getLastCudaError("g_getPredict");
         }
@@ -209,7 +262,8 @@ void outputPredict(int* vote, int start)
 				Layers::instance()->get(spiking_que[i]->m_name)->getOutputs()->getDev(),
 				Layers::instance()->get(spiking_que[i]->m_name)->getOutputs()->cols,
 				start,
-				vote);
+				vote,
+                dec_outputs);
 			cudaStreamSynchronize(0);
             getLastCudaError("g_getPredict_softmax");
 		}
@@ -219,7 +273,7 @@ void outputPredict(int* vote, int start)
 
 
 
-void getSpikingNetworkCost(int* y, float* weights, int* vote, int start)
+void getSpikingNetworkCost(int* y, float* weights, int* vote, float* dec_outputs, int start)
 {
     /*feedforward*/
     for(int i = 0; i < (int)spiking_que.size(); i++){
@@ -236,7 +290,7 @@ void getSpikingNetworkCost(int* y, float* weights, int* vote, int start)
     }
     
     /*record the prediction*/
-    outputPredict(vote, start);
+    outputPredict(vote, dec_outputs, start);
 
     /*backpropagation*/
     for(int i = (int)spiking_que.size() - 1; i >=0; i--){
@@ -253,7 +307,7 @@ void getSpikingNetworkCost(int* y, float* weights, int* vote, int start)
     getLastCudaError("updateWB");
 }
 
-void resultPredict(int* y, int* vote, int start)
+void resultPredict(int* y, int* vote, float* dec_outputs, int start)
 {
     /*feedforward*/
     for(int i = 0; i < (int)spiking_que.size(); i++){
@@ -269,7 +323,7 @@ void resultPredict(int* y, int* vote, int start)
     }
 
     /*obtain the prediction predict*/
-    outputPredict(vote, start);
+    outputPredict(vote, dec_outputs, start);
 }
 
 void gradientChecking(bool**x, int*y, int batch, int nclasses, cublasHandle_t handle)
@@ -394,6 +448,7 @@ void predictTestRate(cuMatrixVector<bool>&x,
     dl->getBatchSpikes(testX, 0);
 
     cuSVote->gpuClear();
+    cuSOutput->gpuClear();
     for (int k = 0; k < ((int)testX.size() + batch - 1) / batch; k ++) {
         dl->synchronize();
         int start = k * batch;
@@ -411,7 +466,7 @@ void predictTestRate(cuMatrixVector<bool>&x,
         }
 
         dl->testData();
-        resultPredict(testY->getDev() + start, cuSVote->getDev() + start * nclasses, k * batch - start);
+        resultPredict(testY->getDev() + start, cuSVote->getDev() + start * nclasses, cuSOutput->getDev() + start * nclasses, k * batch - start);
         printf("\b\b\b\b\b\b\b\b\b");
     }
 
@@ -469,6 +524,12 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
 
     float my_start = (float)clock();
     predictTestRate(x, y, testX, testY, batch, nclasses, handle);
+    if (Config::instance()->hasRecordWrong()) {
+        cuSPredictions->toCpu();
+        cuSOutput->toCpu();
+        //recordWrongPredictions(testY->getHost(), cuSPredictions->getHost(), cuSOutput->getHost(), testX.size(), nclasses);
+    }
+
     float my_end = (float)clock();
     sprintf(logStr, "===================output fire counts================\n");
     LOG(logStr, "Result/log.txt");
@@ -518,6 +579,7 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
         dl->loadBatchSpikes(x, 0);
 
         cuSTrVote->gpuClear();
+        cuSTrOutput->gpuClear();
         float cost = 0.0f;
         for (int k = 0; k < ((int)x.size() + batch - 1) / batch; k ++) {
             dl->synchronize();
@@ -538,6 +600,7 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
                 y->getDev() + start, 
                 cuSampleWeight->getDev() + start, 
                 cuSTrVote->getDev() + start * nclasses, 
+                cuSTrOutput->getDev() + start * nclasses,
                 k * batch - start);
             cost += getSpikingCost();
             printf("\b\b\b\b\b\b\b\b\b");
@@ -610,7 +673,12 @@ void cuTrainSpikingNetwork(cuMatrixVector<bool>&x,
             SpikingLayerBase* layer = (SpikingLayerBase*) Layers::instance()->get(spiking_que[i]->m_name);
             layer->printFireCount();
         }
-
+        
+        if (Config::instance()->hasRecordWrong()){
+            cuSTrPredictions->toCpu();
+            cuSTrOutput->toCpu();
+            recordWrongPredictions(y->getHost(), cuSTrPredictions->getHost(), cuSTrOutput->getHost(), x.size(), nclasses);
+        }
 
         if(epo == 0){
             MemoryMonitor::instance()->printCpuMemory();

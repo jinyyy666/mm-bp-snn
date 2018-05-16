@@ -19,6 +19,29 @@ private:
 	bool m_IsGradientChecking;
 };
 
+class ConfigRecordWrong
+{
+public:
+    ConfigRecordWrong(bool hasRecordWrong)
+    {
+        m_hasRecordWrong = hasRecordWrong;
+    }
+    bool getValue(){return m_hasRecordWrong;}
+private:
+    bool m_hasRecordWrong;
+};
+
+class ConfigMarkTest
+{
+public:
+    ConfigMarkTest(bool hasMarker)
+    {
+        m_hasMarkTest = hasMarker;
+    }
+    bool getValue(){return m_hasMarkTest;}
+private:
+    bool m_hasMarkTest;
+};
 
 class ConfigBoostWeight
 {
@@ -741,6 +764,8 @@ public:
 		delete  m_nonLinearity;
 		delete  m_isGradientChecking;
         delete  m_hasBoostWeightTrain;
+        delete  m_hasRecordWrong;
+        delete  m_hasMarkTest;
         delete  m_useEffectRatio;
         delete  m_optimizer;
 		delete  m_batchSize;
@@ -761,6 +786,13 @@ public:
 	bool getIsGradientChecking(){
 		return m_isGradientChecking->getValue();}
 
+    bool hasRecordWrong(){
+        return m_hasRecordWrong->getValue();
+    }
+
+    bool hasMarkTest(){
+        return m_hasMarkTest->getValue();
+    }
     bool hasBoostWeightTrain(){
         return m_hasBoostWeightTrain->getValue();
     }
@@ -916,6 +948,8 @@ private:
 	ConfigNonLinearity       *m_nonLinearity;
 	ConfigGradient           *m_isGradientChecking;
     ConfigBoostWeight        *m_hasBoostWeightTrain;
+    ConfigRecordWrong        *m_hasRecordWrong;
+    ConfigMarkTest           *m_hasMarkTest;
     ConfigEffectRatio        *m_useEffectRatio;
     ConfigOptimizer          *m_optimizer;
     ConfigWeightReg          *m_weightReg;

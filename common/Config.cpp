@@ -563,6 +563,19 @@ void Config::init(std::string path)
     sprintf(logStr, "Allow Dynamic Threshold : %d\n", m_allowDynamicThreshold);
     LOG(logStr, "Result/log.txt");
 
+    /*Record Wrong*/
+    bool has_record_wrong = get_word_bool(m_configStr, "RECORD_WRONG");
+    m_hasRecordWrong = new ConfigRecordWrong(has_record_wrong);
+    sprintf(logStr, "Record the wrong prediction: %d\n", has_record_wrong);
+    LOG(logStr, "Result/log.txt");
+
+    /*Mark Test*/
+    bool has_mark_test = get_word_bool(m_configStr, "MARK_TEST");
+    m_hasMarkTest = new ConfigMarkTest(has_mark_test);
+    sprintf(logStr, "Load only subset of test? : %d\n", has_mark_test);
+    LOG(logStr, "Result/log.txt");
+
+
     /*BOOST_METHOD*/
     bool has_boost_weight = get_word_bool(m_configStr, "BOOST_METHOD");
     m_hasBoostWeightTrain = new ConfigBoostWeight(has_boost_weight);

@@ -16,13 +16,14 @@ int readNMnistData(cuMatrixVector<bool> &x,
 	std::string path,
 	int samples_per_class,
 	int input_neurons,
-    int end_time);
+    int end_time,
+    bool has_mark_test);
 
 //* read the labels
 int readNMnistLabel(const std::vector<int>& labels, cuMatrix<int>* &mat);
 
 //* read the samples and label (encoded in the directory)
-int readNMnist(std::string path, std::vector<std::pair<cuMatrix<bool>*, int> >& x, int num, int input_neurons, int end_time);
+int readNMnist(std::string path, std::vector<std::pair<cuMatrix<bool>*, int> >& x, int num, int input_neurons, int end_time, bool need_shuffle);
 
 //* read each nmnist file
 void read_each_nmnist(const std::string& filename, cuMatrixVector<bool>& x, int nrows, int ncols);

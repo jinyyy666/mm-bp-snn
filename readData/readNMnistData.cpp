@@ -2,12 +2,41 @@
 #include <sstream>
 #include <fstream>
 #include <vector>
+#include <set>
 #include <algorithm>
 #include <assert.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <cuda_runtime_api.h>
 
+//* only consider those interesting samples
+int filterNMnist(std::vector<std::pair<cuMatrix<bool>*, int> > & collect)
+{
+    static set<int> marker = {39, 49, 85, 121, 143, 277, 290, 314, 337, 339, 
+    355, 435, 467, 479, 563, 642, 649, 823, 904, 1147, 
+    1300, 1350, 1603, 1608, 1916, 1970, 1985, 2005, 2049, 2077, 
+    2092, 2185, 2367, 2797, 2971, 3023, 3126, 3128, 3172, 3210, 
+    3257, 3265, 3299, 3354, 3358, 3374, 3861, 3878, 3977, 4011, 
+    4019, 4048, 4078, 4107, 4131, 4187, 4217, 4291, 4433, 4603, 
+    4765, 4903, 5037, 5134, 5960, 6012, 6143, 6224, 6226, 6281, 
+    6366, 6395, 6491, 6514, 6515, 6747, 6949, 7015, 7046, 7047, 
+    7061, 7117, 7133, 7150, 7160, 7218, 7233, 7265, 7329, 7349, 
+    7426, 7431, 7565, 7911, 8003, 8015, 8212, 8335, 8375, 8389, 
+    8530, 8779, 8783, 8955, 9024, 9040, 9074, 9089, 9098, 9101, 
+    9122, 9126, 9151, 9172, 9184, 9246, 9370, 9384, 9571, 9637, 
+    9638, 9886, 9887, 9888, 9889};
+    
+    std::vector<std::pair<cuMatrix<bool>*, int> > new_collect;
+    for(int i = 0; i < collect.size(); ++i)
+    {
+        if(marker.find(i) != marker.end())
+            new_collect.push_back(collect[i]);
+        else
+            delete collect[i].first;
+    }
+    collect = new_collect;
+    return (int)new_collect.size();
+}
 
 //* find the data samples in the directory
 void file_finder(const std::string& path, std::vector<std::pair<cuMatrix<bool>*, int> >& x, int sample_per_class, int end_time, int input_neurons)
@@ -138,7 +167,8 @@ int readNMnist(
         std::vector<std::pair<cuMatrix<bool>*, int> > & x,
         int sample_per_class,
         int input_neurons,
-        int end_time)
+        int end_time,
+        bool need_shuffle)
 {
     //* read the data from the path
     struct stat sb;
@@ -154,7 +184,8 @@ int readNMnist(
     //* random shuffle the train data, tricky! 
     //* this is very important because the datafile are stored in ordered, but we want it
     //* to be random when training
-    random_shuffle(x.begin(), x.end());
+    if(need_shuffle)
+        random_shuffle(x.begin(), x.end());
     return x.size();
 }
 
@@ -175,11 +206,15 @@ int readNMnistData(
         std::string path,
         int samples_per_class,
         int input_neurons,
-        int end_time)
+        int end_time,
+        bool has_mark_test)
 {
 
     std::vector<std::pair<cuMatrix<bool>*, int> > collect;
-    int len = readNMnist(path, collect, samples_per_class, input_neurons, end_time);
+    bool need_shuffle = path.find("test") == string::npos;
+    int len = readNMnist(path, collect, samples_per_class, input_neurons, end_time, need_shuffle);
+    if(has_mark_test)
+        len = filterNMnist(collect);
     //* read MNIST sample into cuMatrixVector
     for(int i = 0; i < collect.size(); ++i) x.push_back(collect[i].first);
 

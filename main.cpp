@@ -25,11 +25,11 @@
 #include "common/track.h"
 #include "layers/Pooling.h"
 
-//#define VERIFY
+#define VERIFY
 //#define VERIFY_RESERVOIR
 //#define SPIKING_CNN
 //#define VERIFY_SOFTMAX_SPIKING_CNN
-#define VERIFY_SPIKING_CNN
+//#define VERIFY_SPIKING_CNN
 
 void runMnist();
 void runCifar10();
@@ -47,7 +47,7 @@ std::vector<int> g_argv;
 int main (int argc, char** argv)
 {
     //cudaDeviceReset();
-    cudaSetDevice(1);
+    cudaSetDevice(0);
 #ifdef linux
     signal(SIGSEGV, handler);   // install our handler
 #endif
@@ -57,7 +57,7 @@ int main (int argc, char** argv)
 		g_argv.push_back(atoi(argv[2]));
 	}
 	printf("1. MNIST\n2. CIFAR-10\n3. CHINESE\n4. CIFAR-100\n5. VOTE MNIST\n6. NMnist\n7. Spiking Mnist\n8. Spoken English Letter\nChoose the dataSet to run:");
-	int cmd = 7;
+	int cmd = 8;
     /*
 	if(g_argv.size() >= 2)
 		cmd = g_argv[0];
@@ -403,8 +403,8 @@ void runNMnist(){
     int end_time = config->getEndTime();
     int train_per_class = config->getTrainPerClass();
     int test_per_class = config->getTestPerClass();
- 	readNMnistData(trainX, trainY, config->getTrainPath(), train_per_class, input_neurons, end_time);
- 	readNMnistData(testX , testY, config->getTestPath(), test_per_class, input_neurons, end_time);
+ 	readNMnistData(trainX, trainY, config->getTrainPath(), train_per_class, input_neurons, end_time, false);
+ 	readNMnistData(testX , testY, config->getTestPath(), test_per_class, input_neurons, end_time, config->hasMarkTest());
 
 	MemoryMonitor::instance()->printCpuMemory();
 	MemoryMonitor::instance()->printGpuMemory();
@@ -431,7 +431,7 @@ void runNMnist(){
 
     
 	//if(cmd == 2)
-		//cuReadSpikingNet("Result/checkPoint.txt");
+	//cuReadSpikingNet("Result/checkPoint_current_best.txt");
     
 
 	//* learning rate
