@@ -18,10 +18,11 @@
 % Each of the sample file has the name '[Train/Test]_[#cls_id].dat'
 % where #cls_id is the label.
 %
-% Since the original spike times are pretty large (0~30,000 ms), here we 
+% Since the original dataset is too fine-grained pretty large (0.01 ms), we 
 % further bin the events into buckets with certain size, and each bucket 
-% represents a new time point. There might be multiple spikes in the same 
-% bucket, which is a very rare case when the window size is not too big. 
+% represents a new time point to reduce the granularity. 
+% There might be multiple spikes in the same bucket, which is a very
+% rare case when the window size is not too big. 
 % Therefore, we ignore those cases for simplicity.
 % 
 % 
