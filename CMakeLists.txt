@@ -1,22 +1,14 @@
 cmake_minimum_required (VERSION 3.0)
-project (CUDA-CNN)
+project (CUDA-SNN)
 
 # The version number.
-set (CUDA-CNN_VERSION_MAJOR 2)
-set (CUDA-CNN_VERSION_MINOR 0)
-
-#    CMake Scripts dir
-#set(CMAKE_SCRIPT_DIR ${CMAKE_SOURCE_DIR}/CMakeScripts)
-
-#CMake module path for custom module finding
-#set( CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SCRIPT_DIR})
+set (CUDA-SNN_VERSION_MAJOR 2)
+set (CUDA-SNN_VERSION_MINOR 0)
 
 find_package (CUDA REQUIRED)
 include_directories (${CUDA_INCLUDE_DIRS})
-#include_directories (${CUDA_SDK_ROOT_DIR})
 MESSAGE("${CUDA_INCLUDE_DIRS}/../samples/common/inc")
 include_directories ("${CUDA_INCLUDE_DIRS}/../samples/common/inc")
-#/usr/local/cuda/NVIDIA_CUDA-7.0_Samples/common/inc")
 set(CUDA_SEPARABLE_COMPILATION ON)
 
 # opencv
@@ -24,12 +16,8 @@ find_package( OpenCV REQUIRED )
 INCLUDE_DIRECTORIES( ${OPENCV_INCLUDE_DIR} )
 set(OpenCV_LIBRARIES ${OpenCV_LIBS})
 
-
 include_directories(${PROJECT_SOURCE_DIR})
 
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -rdynamic")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3 -rdynamic")
 
 
@@ -47,11 +35,7 @@ set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}
 
 MESSAGE(${CUDA_NVCC_FLAGS})
 
-#add_library(${EXAMPLE_NAME}.o OBJECT ${source})
-#set(EXAMPLE_OBJ_LIB $<TARGET_OBJECTS:${EXAMPLE_NAME}.o>)
-
-
-file(GLOB CUDA_CNN_CU_SOURCES  RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} 
+file(GLOB CUDA_SNN_CU_SOURCES  RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} 
     "readData/*" 
     "layers/*"
     "dataAugmentation/*" 
@@ -60,16 +44,12 @@ file(GLOB CUDA_CNN_CU_SOURCES  RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
     "net.*"
     "net_spiking.*")
 
-    #  EXCLUDE_FROM_ALL "build/*")
-
-cuda_add_executable(CUDA-CNN ${CUDA_CNN_CU_SOURCES})
-#cuda_add_library(CUDA-CNN STATIC ${CUDA_CNN_CPP_SOURCES})
-target_link_libraries(CUDA-CNN
+cuda_add_executable(CUDA-SNN ${CUDA_SNN_CU_SOURCES})
+target_link_libraries(CUDA-SNN
   ${OpenCV_LIBRARIES}
   ${CUDA_CUBLAS_LIBRARIES}
   ${CUDA_curand_LIBRARY}
   ${CUDA_LIBRARIES}
   )
-CUDA_ADD_CUBLAS_TO_TARGET(CUDA-CNN)
+CUDA_ADD_CUBLAS_TO_TARGET(CUDA-SNN)
 
-#add_subdirectory(net)
