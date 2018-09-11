@@ -1,6 +1,10 @@
 # Hybrid Macro/Micro Level Backpropagation for SNNs
 This repo is the CUDA implementation of SNNs trained the hybrid macro/micro level backpropagation, modified based on <a href="https://github.com/zhxfl/CUDA-CNN">zhxfl</a> for spiking neuron networks.
 
+The paper <a href="https://arxiv.org/abs/1805.07866">Hybrid Macro/Micro Level Backpropagation for Training Deep Spiking Neural Networks</a> is accepted by NIPS.
+
+Contact <yyzjin@gmail.com> if you have any questions or concerns.
+
 # Dependencies and Libraries
 * opencv
 * cuda (suggest cuda 8.0)
